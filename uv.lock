@@ -17,12 +17,14 @@ source = { virtual = "." }
 dependencies = [
     { name = "chemprop" },
     { name = "datasets" },
+    { name = "pytorch-lightning" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "chemprop", specifier = ">=2.2.2" },
     { name = "datasets", specifier = ">=4.7.0" },
+    { name = "pytorch-lightning", specifier = ">=2.6.1" },
 ]
 
 [[package]]

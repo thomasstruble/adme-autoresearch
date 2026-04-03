@@ -46,14 +46,14 @@ FINAL_LR = 1e-4         # final learning rate after decay
 
 # Misc
 BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
-NUM_WORKERS = 0         # dataloader workers (>0 is faster on Linux)
+NUM_WORKERS = 15         # dataloader workers (>0 is faster on Linux)
 SEED = 42
 
 # ---------------------------------------------------------------------------
 # Model config (read-only after build — logged at startup)
 # ---------------------------------------------------------------------------
 
-N_TASKS = len(TARGET_COLS)   # 9 ADME regression targets
+N_TASKS = len(TARGET_COLS)   # 2 PXR regression targets (pEC50, Emax)
 
 
 @dataclass
@@ -171,21 +171,25 @@ print(f"Time budget: {TIME_BUDGET}s")
 # ---- Dataloaders -----------------------------------------------------------
 print("\nLoading data…")
 train_loader = make_dataloader("train", batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
-val_loader = make_dataloader("test", batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
+val_loader   = make_dataloader("validation", batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
+test_loader  = make_dataloader("test", batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
 
 train_dset = train_loader.dataset
-val_dset = val_loader.dataset
+val_dset   = val_loader.dataset
+test_dset  = test_loader.dataset
 
-# ---- Target scaling (fit on train, apply to val; inverse baked into model) --
+# ---- Target scaling (fit on train, apply to val + test; inverse baked into model) --
 from chemprop.nn.transforms import UnscaleTransform
 
 output_scaler = train_dset.normalize_targets()
 val_dset.normalize_targets(output_scaler)
+test_dset.normalize_targets(output_scaler)
 output_transform = UnscaleTransform.from_standard_scaler(output_scaler)
 
 print(
     f"Train molecules: {len(train_dset):,} | "
-    f"Val molecules:   {len(val_dset):,}"
+    f"Val molecules:   {len(val_dset):,} | "
+    f"Test molecules:  {len(test_dset):,}"
 )
 
 # ---- Model -----------------------------------------------------------------
@@ -232,7 +236,10 @@ num_epochs = trainer.current_epoch + 1
 
 model.eval()
 print("\nRunning final evaluation on validation set…")
-eval_results = evaluate_regression(model, val_loader, batch_size=BATCH_SIZE)
+val_results  = evaluate_regression(model, val_loader,  batch_size=BATCH_SIZE)
+
+print("Running final evaluation on test set…")
+test_results = evaluate_regression(model, test_loader, batch_size=BATCH_SIZE)
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -247,9 +254,14 @@ peak_vram_mb = (
 )
 
 print("\n--- Results ---")
-print(f"mean_rmse:          {eval_results['mean_rmse']:.6f}")
-print("per_task_rmse:")
-for task, rmse in eval_results["per_task"].items():
+print(f"val_mean_rmse:      {val_results['mean_rmse']:.6f}")
+print("val_per_task_rmse:")
+for task, rmse in val_results["per_task"].items():
+    tag = f"{rmse:.6f}" if not math.isnan(rmse) else "  n/a (no labels)"
+    print(f"  {task:<40s}: {tag}")
+print(f"\ntest_mean_rmse:     {test_results['mean_rmse']:.6f}")
+print("test_per_task_rmse:")
+for task, rmse in test_results["per_task"].items():
     tag = f"{rmse:.6f}" if not math.isnan(rmse) else "  n/a (no labels)"
     print(f"  {task:<40s}: {tag}")
 print(f"\ntraining_seconds:   {total_training_time:.1f}")
@@ -259,6 +271,7 @@ print(f"peak_vram_mb:       {peak_vram_mb:.1f}")
 print(f"num_epochs:         {num_epochs}")
 print(f"train_molecules:    {len(train_dset):,}")
 print(f"val_molecules:      {len(val_dset):,}")
+print(f"test_molecules:     {len(test_dset):,}")
 print(f"n_tasks:            {N_TASKS}")
 print(f"depth:              {DEPTH}")
 print(f"hidden_size:        {HIDDEN_SIZE}")
@@ -268,9 +281,14 @@ print(f"max_lr:             {MAX_LR}")
 
 #write to log file
 with open('run.log', 'w') as f:
-    f.write(f"mean_rmse:          {eval_results['mean_rmse']:.6f}\n")
-    f.write("per_task_rmse:\n")
-    for task, rmse in eval_results["per_task"].items():
+    f.write(f"val_mean_rmse:      {val_results['mean_rmse']:.6f}\n")
+    f.write("val_per_task_rmse:\n")
+    for task, rmse in val_results["per_task"].items():
+        tag = f"{rmse:.6f}" if not math.isnan(rmse) else "  n/a (no labels)"
+        f.write(f"  {task:<40s}: {tag}\n")
+    f.write(f"\ntest_mean_rmse:     {test_results['mean_rmse']:.6f}\n")
+    f.write("test_per_task_rmse:\n")
+    for task, rmse in test_results["per_task"].items():
         tag = f"{rmse:.6f}" if not math.isnan(rmse) else "  n/a (no labels)"
         f.write(f"  {task:<40s}: {tag}\n")
     f.write(f"\ntraining_seconds:   {total_training_time:.1f}\n")
@@ -280,6 +298,7 @@ with open('run.log', 'w') as f:
     f.write(f"num_epochs:         {num_epochs}\n")
     f.write(f"train_molecules:    {len(train_dset):,}\n")
     f.write(f"val_molecules:      {len(val_dset):,}\n")
+    f.write(f"test_molecules:     {len(test_dset):,}\n")
     f.write(f"n_tasks:            {N_TASKS}\n")
     f.write(f"depth:              {DEPTH}\n")
     f.write(f"hidden_size:        {HIDDEN_SIZE}\n")

@@ -12,19 +12,12 @@ from datasets import load_dataset, load_from_disk
 # Constants (fixed, do not modify)
 # ---------------------------------------------------------------------------
 
-TIME_BUDGET = 300        # training time budget in seconds (5 minutes)
+TIME_BUDGET = 150        # training time budget in seconds (5 minutes)
 
 # Regression target columns present in the dataset
 TARGET_COLS = [
-    "LogD",
-    "KSOL",
-    "HLM CLint",
-    "MLM CLint",
-    "Caco-2 Permeability Papp A>B",
-    "Caco-2 Permeability Efflux",
-    "MPPB",
-    "MBPB",
-    "MGMB",
+    "pEC50",
+    "Emax_estimate (log2FC vs. baseline)",
 ]
 
 # ---------------------------------------------------------------------------
@@ -33,7 +26,11 @@ TARGET_COLS = [
 
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "autoresearch")
 DATA_DIR = os.path.join(CACHE_DIR, "data")
-BASE_REPO = "openadmet/openadmet-expansionrx-challenge-data"
+BASE_REPO = "openadmet/pxr-challenge-train-test"
+
+VAL_FRACTION  = 0.1   # fraction of training data held out for validation
+TEST_FRACTION = 0.1   # fraction of training data held out for local test
+SPLIT_SEED = 42
 
 
 # ---------------------------------------------------------------------------
@@ -41,27 +38,46 @@ BASE_REPO = "openadmet/openadmet-expansionrx-challenge-data"
 # ---------------------------------------------------------------------------
 def download_data():
     """
-    Download the data from Hugging Face and save it to disk.
-    """
-    splits = ["train", "validation", "test"]
-    for split in splits:
-        try:
-            dataset = load_dataset(BASE_REPO, split=split, cache_dir=CACHE_DIR)
-            dataset.save_to_disk(os.path.join(DATA_DIR, split))
-        except Exception as e:
-            print(f"Error downloading {split} split, it might not exist (eg: some may only have train/val or train/test)")
+    Download the PXR challenge training data from Hugging Face, split into
+    train/validation/test (80/10/10), and save all three to disk.
 
-    files = glob.glob(os.path.join(DATA_DIR, "*", "*"))
-    for i in files:
-        for j in splits:
-            if j in i:
-                print(f"Downloaded {j} split to {i}")
+    The official HuggingFace test set is blinded (no labels), so both a
+    held-out validation split and a local test split are carved from the
+    training data instead.
+    """
+    full_train = load_dataset(BASE_REPO, split="train", cache_dir=CACHE_DIR)
+
+    # First carve off 20 % (val + test), leaving 80 % for training
+    split1 = full_train.train_test_split(
+        test_size=VAL_FRACTION + TEST_FRACTION,
+        seed=SPLIT_SEED,
+        shuffle=True,
+    )
+    train_ds   = split1["train"]
+    remainder  = split1["test"]
+
+    # Split the 20 % remainder evenly into val (10 %) and test (10 %)
+    split2 = remainder.train_test_split(
+        test_size=0.5,
+        seed=SPLIT_SEED,
+        shuffle=True,
+    )
+    val_ds  = split2["train"]
+    test_ds = split2["test"]
+
+    train_ds.save_to_disk(os.path.join(DATA_DIR, "train"))
+    val_ds.save_to_disk(os.path.join(DATA_DIR, "validation"))
+    test_ds.save_to_disk(os.path.join(DATA_DIR, "test"))
+
+    print(f"Saved train split      ({len(train_ds):,} rows) → {os.path.join(DATA_DIR, 'train')}")
+    print(f"Saved validation split ({len(val_ds):,} rows)  → {os.path.join(DATA_DIR, 'validation')}")
+    print(f"Saved test split       ({len(test_ds):,} rows)  → {os.path.join(DATA_DIR, 'test')}")
 
 
 # ---------------------------------------------------------------------------
 # Runtime utilities (imported by train.py)
 # ---------------------------------------------------------------------------
-def make_dataloader(split: str = "train", batch_size: int = 64, num_workers: int = 0):
+def make_dataloader(split: str = "train", batch_size: int = 64, num_workers: int = 10):
     """
     Build a chemprop-compatible DataLoader for the requested dataset split.
 
@@ -77,7 +93,8 @@ def make_dataloader(split: str = "train", batch_size: int = 64, num_workers: int
     Parameters
     ----------
     split : str
-        One of ``"train"``, ``"validation"``, or ``"test"``.
+        One of ``"train"``, ``"validation"``, or ``"test"`` (saved by
+        ``download_data``).
     batch_size : int
         Number of molecules per mini-batch.
     num_workers : int

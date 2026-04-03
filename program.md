@@ -29,6 +29,8 @@ Each experiment runs on a single GPU. The training script runs for a **fixed tim
 - Modify `prepare.py`. It is read-only. It contains the fixed evaluation, data loading, tokenizer, and training constants (time budget, sequence length, etc).
 - Install new packages or add dependencies. You can only use what's already in `pyproject.toml`.
 - Modify the evaluation harness. The `evaluate_regression` function in `prepare.py` is the ground truth metric.
+- Use ensembles to game the metrics, increases in performance by ensembeling should generally not give massive gains, this indicates improper aggregation of the metrics across an ensemble typically. 
+- You should not need to spawn a sub agent to run this, if you do ensure it has the full context of this file.
 
 **The goal is simple: get the lowest mean_rmse.** Since the time budget is fixed, you don't need to worry about training time — it's always 5 minutes. Everything is fair game: change the architecture, the optimizer, the hyperparameters, the batch size, the model size. The only constraint is that the code runs without crashing and finishes within the time budget.
 
@@ -44,33 +46,30 @@ Once the script finishes it prints a summary like this:
 
 ```
 --- Results ---
-mean_rmse:          80.842013
-per_task_rmse:
-  LogD                                    : 2.182697
-  KSOL                                    : 180.815933
-  HLM CLint                               : 53.677105
-  MLM CLint                               : 444.025696
-  Caco-2 Permeability Papp A>B            : 9.861119
-  Caco-2 Permeability Efflux              : 7.761608
-  MPPB                                    : 11.235456
-  MBPB                                    : 7.120412
-  MGMB                                    : 10.898094
+val_mean_rmse:      3.549402
+val_per_task_rmse:
+  pEC50                                   : 4.397968
+  Emax_estimate (log2FC vs. baseline)     : 2.700835
 
-training_seconds:   301.5
-total_seconds:      304.4
-startup_seconds:    1.1
-peak_vram_mb:       103.3
-num_epochs:         162
-train_molecules:    5,326
-val_molecules:      2,282
-n_tasks:            9
+test_mean_rmse:     3.495393
+test_per_task_rmse:
+  pEC50                                   : 4.391641
+  Emax_estimate (log2FC vs. baseline)     : 2.599144
+
+training_seconds:   150.5
+total_seconds:      153.2
+startup_seconds:    0.7
+peak_vram_mb:       95.0
+num_epochs:         218
+train_molecules:    3,312
+val_molecules:      414
+test_molecules:     414
+n_tasks:            2
 depth:              3
 hidden_size:        300
 ffn_num_layers:     2
 batch_size:         64
 max_lr:             0.001
-
-
 ```
 
 Note that the script is configured to always stop after 5 minutes, so depending on the computing platform of this computer the numbers might look different. You can extract the key metric from the log filee in the folder lightning_logs/version_0 under metrics.csv . Logs from the python file will be in run.log
