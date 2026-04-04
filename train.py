@@ -22,7 +22,7 @@ from dataclasses import dataclass, asdict
 import numpy as np
 import torch
 import lightning.pytorch as pl
-from lightning.pytorch.callbacks import Callback
+from lightning.pytorch.callbacks import Callback, StochasticWeightAveraging
 
 from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluate_regression
 
@@ -54,25 +54,6 @@ TARGET_COLS = [
 #       return np.array([v for _, v in Descriptors.descList], dtype=np.float32)
 #
 EXTRA_FEATURES_FN = None
-
-# Physicochemical descriptor featurizer (MolWt, LogP, HBD, HBA, TPSA)
-# These 5 features are ADME-relevant and directly informative for PXR binding.
-from rdkit import Chem
-from rdkit.Chem import Descriptors, rdMolDescriptors
-
-def physchem_features(smiles: str) -> np.ndarray | None:
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        return None
-    return np.array([
-        Descriptors.MolWt(mol) / 500.0,
-        Descriptors.MolLogP(mol) / 5.0,
-        rdMolDescriptors.CalcNumHBD(mol) / 5.0,
-        rdMolDescriptors.CalcNumHBA(mol) / 10.0,
-        Descriptors.TPSA(mol) / 100.0,
-    ], dtype=np.float32)
-
-EXTRA_FEATURES_FN = physchem_features
 
 # ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
@@ -274,7 +255,7 @@ trainer = pl.Trainer(
     logger=True,
     enable_checkpointing=False,
     enable_progress_bar=True,
-    callbacks=[time_callback],
+    callbacks=[time_callback, StochasticWeightAveraging(swa_lrs=1e-3, swa_epoch_start=100)],
 )
 
 print(f"\nStarting training (accelerator={accelerator}, max wall-clock={TIME_BUDGET}s)…\n")
