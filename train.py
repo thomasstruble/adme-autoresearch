@@ -70,7 +70,7 @@ FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN (None → same as HIDDEN_SIZE)
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
 BATCH_SIZE = 32         # molecules per mini-batch
-WARMUP_EPOCHS = 2       # epochs of LR warm-up
+WARMUP_EPOCHS = 1       # epochs of LR warm-up
 INIT_LR = 1e-4          # starting learning rate
 MAX_LR = 1e-3           # peak learning rate
 FINAL_LR = 1e-4         # final learning rate after decay
@@ -183,7 +183,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         hidden_dim=config.ffn_hidden_size,
         n_layers=config.ffn_num_layers,
         dropout=config.dropout,
-        activation='leakyrelu',
     )
     if output_transform is not None:
         ffn_kwargs["output_transform"] = output_transform
