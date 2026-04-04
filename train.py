@@ -71,9 +71,9 @@ FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN (None → same as HIDDEN_SIZE)
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
 BATCH_SIZE = 64         # molecules per mini-batch
 WARMUP_EPOCHS = 2       # epochs of LR warm-up
-INIT_LR = 1e-4          # starting learning rate
-MAX_LR = 1e-3           # peak learning rate
-FINAL_LR = 1e-4         # final learning rate after decay
+INIT_LR = 3e-4          # starting learning rate
+MAX_LR = 3e-3           # peak learning rate
+FINAL_LR = 3e-4         # final learning rate after decay
 
 # Misc
 BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
@@ -145,7 +145,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
     from chemprop.models import MPNN
     from chemprop.nn import (
         BondMessagePassing,
-        MeanAggregation,
+        NormAggregation,
         RegressionFFN,
         metrics as cp_metrics,
     )
@@ -156,7 +156,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         dropout=config.dropout,
     )
 
-    agg = MeanAggregation()
+    agg = NormAggregation()
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
