@@ -136,6 +136,25 @@ class TimeBudgetCallback(Callback):
             trainer.should_stop = True
 
 
+class BestValLossCallback(Callback):
+    """Restores the model weights from the epoch with the lowest val_loss at end of training."""
+
+    def __init__(self):
+        self.best_val_loss = float('inf')
+        self._best_state: dict | None = None
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        val_loss = trainer.callback_metrics.get('val_loss', float('inf'))
+        if float(val_loss) < self.best_val_loss:
+            self.best_val_loss = float(val_loss)
+            self._best_state = {k: v.clone() for k, v in pl_module.state_dict().items()}
+
+    def on_fit_end(self, trainer, pl_module):
+        if self._best_state is not None:
+            pl_module.load_state_dict(self._best_state)
+            print(f"  [BestValLoss] Restored weights from best val_loss={self.best_val_loss:.6f}")
+
+
 # ---------------------------------------------------------------------------
 # Build model
 # ---------------------------------------------------------------------------
@@ -154,7 +173,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         depth=config.depth,
         d_h=config.hidden_size,
         dropout=config.dropout,
-        activation='prelu',
     )
 
     agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
@@ -256,7 +274,7 @@ trainer = pl.Trainer(
     logger=True,
     enable_checkpointing=False,
     enable_progress_bar=True,
-    callbacks=[time_callback],
+    callbacks=[time_callback, BestValLossCallback()],
 )
 
 print(f"\nStarting training (accelerator={accelerator}, max wall-clock={TIME_BUDGET}s)…\n")
