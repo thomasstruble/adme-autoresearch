@@ -60,7 +60,7 @@ EXTRA_FEATURES_FN = None
 # ---------------------------------------------------------------------------
 
 # Message passing
-DEPTH = 3               # number of bond message-passing steps
+DEPTH = 2               # number of bond message-passing steps
 HIDDEN_SIZE = 300       # hidden dimension in message passing layers
 DROPOUT = 0.0           # dropout applied in both MP and FFN
 
@@ -251,7 +251,6 @@ trainer = pl.Trainer(
     logger=True,
     enable_checkpointing=False,
     enable_progress_bar=True,
-    gradient_clip_val=1.0,
     callbacks=[time_callback],
 )
 
