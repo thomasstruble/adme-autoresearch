@@ -1,13 +1,11 @@
 """
 ADME multi-task regression training script.
-Uses Chemprop MPNN + Lightning for SMILES → PXR property prediction.
+Uses Chemprop MPNN + Lightning for SMILES → 9 ADME property prediction.
 
 Usage:
     uv run train.py
 
-Edit the configuration sections below to tune the run. No CLI flags needed.
-The agent may freely modify TARGET_COLS, EXTRA_FEATURES_FN, and all
-hyperparameters. Do not modify prepare.py.
+Edit the constants below to tune the run. No CLI flags needed.
 """
 
 import os
@@ -24,49 +22,20 @@ import torch
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks import Callback
 
-from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluate_regression
-
-# ---------------------------------------------------------------------------
-# Target columns — pick any subset of AVAILABLE_TARGET_COLS
-# ---------------------------------------------------------------------------
-# fmt: off
-TARGET_COLS = [
-    "pEC50",
-    "Emax_estimate (log2FC vs. baseline)",
-]
-# fmt: on
-
-# ---------------------------------------------------------------------------
-# Featurizer — define extra molecule-level features for MoleculeDatapoint.x_d
-# ---------------------------------------------------------------------------
-# Set to None to use no extra features (default chemprop graph features only).
-# To add features, define a function with signature:
-#   (smiles: str) -> np.ndarray | None
-# Return None to skip a molecule; return a 1-D float32 array otherwise.
-# Example using RDKit 2D descriptors:
-#
-#   from rdkit import Chem
-#   from rdkit.Chem import Descriptors
-#   def rdkit_descriptors(smiles: str):
-#       mol = Chem.MolFromSmiles(smiles)
-#       if mol is None:
-#           return None
-#       return np.array([v for _, v in Descriptors.descList], dtype=np.float32)
-#
-EXTRA_FEATURES_FN = None
+from prepare import TIME_BUDGET, TARGET_COLS, make_dataloader, evaluate_regression
 
 # ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
 # ---------------------------------------------------------------------------
 
 # Message passing
-DEPTH = 4               # number of bond message-passing steps
-HIDDEN_SIZE = 512       # hidden dimension in message passing layers
+DEPTH = 3               # number of bond message-passing steps
+HIDDEN_SIZE = 300       # hidden dimension in message passing layers
 DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
-FFN_NUM_LAYERS = 3      # number of FFN layers after aggregation
-FFN_HIDDEN_SIZE = 512   # hidden dimension in FFN (None → same as HIDDEN_SIZE)
+FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
+FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN (None → same as HIDDEN_SIZE)
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
 BATCH_SIZE = 64         # molecules per mini-batch
@@ -84,7 +53,7 @@ SEED = 42
 # Model config (read-only after build — logged at startup)
 # ---------------------------------------------------------------------------
 
-N_TASKS = len(TARGET_COLS)   # derived from TARGET_COLS above
+N_TASKS = len(TARGET_COLS)   # 2 PXR regression targets (pEC50, Emax)
 
 
 @dataclass
@@ -145,7 +114,7 @@ def build_model(config: MPNNConfig, output_transform=None):
     from chemprop.models import MPNN
     from chemprop.nn import (
         BondMessagePassing,
-        NormAggregation,
+        AttentiveAggregation,
         RegressionFFN,
         metrics as cp_metrics,
     )
@@ -156,7 +125,7 @@ def build_model(config: MPNNConfig, output_transform=None):
         dropout=config.dropout,
     )
 
-    agg = NormAggregation()
+    agg = AttentiveAggregation(output_size=config.hidden_size)
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
@@ -197,14 +166,13 @@ torch.set_float32_matmul_precision("high")
 config = MPNNConfig()
 print(f"MPNNConfig: {asdict(config)}")
 print(f"Target columns ({N_TASKS}): {TARGET_COLS}")
-print(f"Extra features: {EXTRA_FEATURES_FN.__name__ if EXTRA_FEATURES_FN is not None else 'None'}")
 print(f"Time budget: {TIME_BUDGET}s")
 
 # ---- Dataloaders -----------------------------------------------------------
 print("\nLoading data…")
-train_loader = make_dataloader("train",      target_cols=TARGET_COLS, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, extra_features_fn=EXTRA_FEATURES_FN)
-val_loader   = make_dataloader("validation", target_cols=TARGET_COLS, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, extra_features_fn=EXTRA_FEATURES_FN)
-test_loader  = make_dataloader("test",       target_cols=TARGET_COLS, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, extra_features_fn=EXTRA_FEATURES_FN)
+train_loader = make_dataloader("train", batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
+val_loader   = make_dataloader("validation", batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
+test_loader  = make_dataloader("test", batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
 
 train_dset = train_loader.dataset
 val_dset   = val_loader.dataset
@@ -268,10 +236,10 @@ num_epochs = trainer.current_epoch + 1
 
 model.eval()
 print("\nRunning final evaluation on validation set…")
-val_results  = evaluate_regression(model, val_loader,  target_cols=TARGET_COLS, batch_size=BATCH_SIZE)
+val_results  = evaluate_regression(model, val_loader,  batch_size=BATCH_SIZE)
 
 print("Running final evaluation on test set…")
-test_results = evaluate_regression(model, test_loader, target_cols=TARGET_COLS, batch_size=BATCH_SIZE)
+test_results = evaluate_regression(model, test_loader, batch_size=BATCH_SIZE)
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -305,8 +273,6 @@ print(f"train_molecules:    {len(train_dset):,}")
 print(f"val_molecules:      {len(val_dset):,}")
 print(f"test_molecules:     {len(test_dset):,}")
 print(f"n_tasks:            {N_TASKS}")
-print(f"target_cols:        {TARGET_COLS}")
-print(f"extra_features:     {EXTRA_FEATURES_FN.__name__ if EXTRA_FEATURES_FN is not None else 'None'}")
 print(f"depth:              {DEPTH}")
 print(f"hidden_size:        {HIDDEN_SIZE}")
 print(f"ffn_num_layers:     {FFN_NUM_LAYERS}")
@@ -334,8 +300,6 @@ with open('run.log', 'w') as f:
     f.write(f"val_molecules:      {len(val_dset):,}\n")
     f.write(f"test_molecules:     {len(test_dset):,}\n")
     f.write(f"n_tasks:            {N_TASKS}\n")
-    f.write(f"target_cols:        {TARGET_COLS}\n")
-    f.write(f"extra_features:     {EXTRA_FEATURES_FN.__name__ if EXTRA_FEATURES_FN is not None else 'None'}\n")
     f.write(f"depth:              {DEPTH}\n")
     f.write(f"hidden_size:        {HIDDEN_SIZE}\n")
     f.write(f"ffn_num_layers:     {FFN_NUM_LAYERS}\n")
