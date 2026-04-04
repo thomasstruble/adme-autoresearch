@@ -73,7 +73,7 @@ FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 BATCH_SIZE = 64         # molecules per mini-batch
 WARMUP_EPOCHS = 2       # epochs of LR warm-up
 INIT_LR = 1e-4          # starting learning rate
-MAX_LR = 2e-3           # peak learning rate - larger batch allows higher LR
+MAX_LR = 1e-3           # peak learning rate
 FINAL_LR = 1e-4         # final learning rate after decay
 
 # Misc
@@ -176,7 +176,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         dropout=config.dropout,
     )
 
-    agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
+    agg = NormAggregation(norm=35.0)  # drug-like molecules ~30-40 atoms
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
