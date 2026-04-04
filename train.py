@@ -78,7 +78,7 @@ FINAL_LR = 1e-4         # final learning rate after decay
 # Misc
 BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
 NUM_WORKERS = 15         # dataloader workers (>0 is faster on Linux)
-SEED = 42
+SEED = 0
 
 # ---------------------------------------------------------------------------
 # Model config (read-only after build — logged at startup)
@@ -154,7 +154,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         depth=config.depth,
         d_h=config.hidden_size,
         dropout=config.dropout,
-        undirected=True,
     )
 
     agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
