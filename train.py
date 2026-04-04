@@ -78,7 +78,7 @@ FINAL_LR = 1e-4         # final learning rate after decay
 # Misc
 BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
 NUM_WORKERS = 15         # dataloader workers (>0 is faster on Linux)
-SEED = 0
+SEED = 42
 
 # ---------------------------------------------------------------------------
 # Model config (read-only after build — logged at startup)
@@ -144,13 +144,13 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
     """Construct a chemprop MPNN for multi-task regression."""
     from chemprop.models import MPNN
     from chemprop.nn import (
-        BondMessagePassing,
+        AtomMessagePassing,
         NormAggregation,
         RegressionFFN,
         metrics as cp_metrics,
     )
 
-    mp = BondMessagePassing(
+    mp = AtomMessagePassing(
         depth=config.depth,
         d_h=config.hidden_size,
         dropout=config.dropout,
