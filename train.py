@@ -168,6 +168,18 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         RegressionFFN,
         metrics as cp_metrics,
     )
+    from chemprop.schedulers import build_NoamLike_LRSched
+
+    class AdamWMPNN(MPNN):
+        def configure_optimizers(self):
+            if self.trainer.train_dataloader is None:
+                self.trainer.estimated_stepping_batches
+            steps_per_epoch = self.trainer.num_training_batches
+            warmup_steps = self.warmup_epochs * steps_per_epoch
+            cooldown_steps = (self.trainer.max_epochs - self.warmup_epochs) * steps_per_epoch
+            opt = torch.optim.AdamW(self.parameters(), lr=self.init_lr, weight_decay=1e-6)
+            lr_sched = build_NoamLike_LRSched(opt, warmup_steps, cooldown_steps, self.init_lr, self.max_lr, self.final_lr)
+            return {"optimizer": opt, "lr_scheduler": {"scheduler": lr_sched, "interval": "step"}}
 
     mp = BondMessagePassing(
         depth=config.depth,
@@ -189,7 +201,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    model = MPNN(
+    model = AdamWMPNN(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
@@ -211,7 +223,7 @@ t_start = time.time()
 torch.manual_seed(SEED)
 if torch.cuda.is_available():
     torch.cuda.manual_seed(SEED)
-torch.set_float32_matmul_precision("highest")
+torch.set_float32_matmul_precision("high")
 
 config = MPNNConfig()
 print(f"MPNNConfig: {asdict(config)}")
