@@ -34,7 +34,6 @@ TARGET_COLS = [
     "pEC50",
     "Emax_estimate (log2FC vs. baseline)",
     "Emax.vs.pos.ctrl_estimate (dimensionless)",
-    "pEC50_std.error (-log10(molarity))",
 ]
 # fmt: on
 
@@ -177,7 +176,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         dropout=config.dropout,
     )
 
-    agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
+    agg = NormAggregation(norm=20.0)  # drug-like molecules ~30-40 atoms
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
