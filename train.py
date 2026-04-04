@@ -39,19 +39,21 @@ TARGET_COLS = [
 # ---------------------------------------------------------------------------
 # Featurizer — define extra molecule-level features for MoleculeDatapoint.x_d
 # ---------------------------------------------------------------------------
-# Morgan binary fingerprints (radius=2, 1024 bits) as supplementary features.
-from chemprop.featurizers.molecule import MorganBinaryFeaturizer
-from chemprop.utils import make_mol as _make_mol
-
-_morgan = MorganBinaryFeaturizer(radius=2, length=1024)
-
-def morgan_fp(smiles: str):
-    mol = _make_mol(smiles, keep_h=False, add_h=False, ignore_stereo=False)
-    if mol is None:
-        return None
-    return _morgan(mol).astype(np.float32)
-
-EXTRA_FEATURES_FN = morgan_fp
+# Set to None to use no extra features (default chemprop graph features only).
+# To add features, define a function with signature:
+#   (smiles: str) -> np.ndarray | None
+# Return None to skip a molecule; return a 1-D float32 array otherwise.
+# Example using RDKit 2D descriptors:
+#
+#   from rdkit import Chem
+#   from rdkit.Chem import Descriptors
+#   def rdkit_descriptors(smiles: str):
+#       mol = Chem.MolFromSmiles(smiles)
+#       if mol is None:
+#           return None
+#       return np.array([v for _, v in Descriptors.descList], dtype=np.float32)
+#
+EXTRA_FEATURES_FN = None
 
 # ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
@@ -143,7 +145,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
     from chemprop.models import MPNN
     from chemprop.nn import (
         BondMessagePassing,
-        NormAggregation,
+        MeanAggregation,
         RegressionFFN,
         metrics as cp_metrics,
     )
@@ -154,7 +156,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         dropout=config.dropout,
     )
 
-    agg = NormAggregation()
+    agg = MeanAggregation()
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
@@ -223,10 +225,7 @@ print(
 )
 
 # ---- Model -----------------------------------------------------------------
-# Detect extra feature dimension from the first training sample
-_sample_xd = train_dset[0].x_d
-n_extra = len(_sample_xd) if _sample_xd is not None else 0
-model = build_model(config, output_transform=output_transform, n_extra_features=n_extra)
+model = build_model(config, output_transform=output_transform)
 
 n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print(f"Trainable parameters: {n_params:,}")
