@@ -34,7 +34,6 @@ TARGET_COLS = [
     "pEC50",
     "pEC50_ci.lower (-log10(molarity))",
     "pEC50_ci.upper (-log10(molarity))",
-    "Emax_estimate (log2FC vs. baseline)",
 ]
 # fmt: on
 
