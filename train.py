@@ -34,6 +34,9 @@ TARGET_COLS = [
     "pEC50",
     "Emax_estimate (log2FC vs. baseline)",
     "Emax.vs.pos.ctrl_estimate (dimensionless)",
+    "pEC50_ci.lower (-log10(molarity))",
+    "pEC50_ci.upper (-log10(molarity))",
+    "Emax_ci.lower (log2FC vs. baseline)",
 ]
 # fmt: on
 
@@ -63,7 +66,7 @@ EXTRA_FEATURES_FN = None
 # Message passing
 DEPTH = 3               # number of bond message-passing steps
 HIDDEN_SIZE = 300       # hidden dimension in message passing layers
-DROPOUT = 0.05          # light dropout with multi-task regularization
+DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
 FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
