@@ -183,7 +183,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         hidden_dim=config.ffn_hidden_size,
         n_layers=config.ffn_num_layers,
         dropout=config.dropout,
-        criterion=cp_metrics.MAE(),
     )
     if output_transform is not None:
         ffn_kwargs["output_transform"] = output_transform
@@ -265,8 +264,8 @@ accelerator = "gpu" if torch.cuda.is_available() else "cpu"
 devices = 1
 
 # Estimate a generous upper bound on epochs; TimeBudgetCallback will stop early
-# Chemprop default is ~max_epochs=50 – we set a large ceiling and rely on time.
-MAX_EPOCHS = 500
+# Set to ~actual epochs to tune the Noam LR schedule cooldown correctly.
+MAX_EPOCHS = 180
 
 trainer = pl.Trainer(
     accelerator=accelerator,
