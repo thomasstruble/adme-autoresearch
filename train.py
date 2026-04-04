@@ -149,29 +149,12 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         RegressionFFN,
         metrics as cp_metrics,
     )
-    from chemprop.schedulers import build_NoamLike_LRSched
-
-    class AdamWMPNN(MPNN):
-        """MPNN subclass that uses AdamW instead of Adam, keeping Noam schedule."""
-        def __init__(self, *args, weight_decay: float = 1e-5, **kwargs):
-            super().__init__(*args, **kwargs)
-            self._weight_decay = weight_decay
-
-        def configure_optimizers(self):
-            if self.trainer.train_dataloader is None:
-                self.trainer.estimated_stepping_batches
-            steps_per_epoch = self.trainer.num_training_batches
-            warmup_steps = self.warmup_epochs * steps_per_epoch
-            cooldown_epochs = self.trainer.max_epochs - self.warmup_epochs
-            cooldown_steps = cooldown_epochs * steps_per_epoch
-            opt = torch.optim.AdamW(self.parameters(), lr=self.init_lr, weight_decay=self._weight_decay)
-            lr_sched = build_NoamLike_LRSched(opt, warmup_steps, cooldown_steps, self.init_lr, self.max_lr, self.final_lr)
-            return {"optimizer": opt, "lr_scheduler": {"scheduler": lr_sched, "interval": "step"}}
 
     mp = BondMessagePassing(
         depth=config.depth,
         d_h=config.hidden_size,
         dropout=config.dropout,
+        undirected=True,
     )
 
     agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
@@ -188,7 +171,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    model = AdamWMPNN(
+    model = MPNN(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
@@ -198,7 +181,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         max_lr=config.max_lr,
         final_lr=config.final_lr,
         metrics=[cp_metrics.RMSE(), cp_metrics.MAE()],
-        weight_decay=1e-5,
     )
     return model
 
