@@ -156,7 +156,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         dropout=config.dropout,
     )
 
-    agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
+    agg = NormAggregation(norm=30.0)  # drug-like molecules ~30-40 atoms
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
@@ -255,7 +255,7 @@ trainer = pl.Trainer(
     logger=True,
     enable_checkpointing=False,
     enable_progress_bar=True,
-    callbacks=[time_callback, StochasticWeightAveraging(swa_lrs=1e-3, swa_epoch_start=100)],
+    callbacks=[time_callback],
 )
 
 print(f"\nStarting training (accelerator={accelerator}, max wall-clock={TIME_BUDGET}s)…\n")
