@@ -185,7 +185,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         hidden_dim=config.ffn_hidden_size,
         n_layers=config.ffn_num_layers,
         dropout=config.dropout,
-        activation="leaky_relu",
+        activation="leakyrelu",
     )
     if output_transform is not None:
         ffn_kwargs["output_transform"] = output_transform
