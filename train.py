@@ -70,7 +70,7 @@ FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
 FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
-BATCH_SIZE = 64         # molecules per mini-batch
+BATCH_SIZE = 32         # molecules per mini-batch
 WARMUP_EPOCHS = 2       # epochs of LR warm-up
 INIT_LR = 1e-4          # starting learning rate
 MAX_LR = 1e-3           # peak learning rate
@@ -177,7 +177,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         dropout=config.dropout,
     )
 
-    agg = NormAggregation(norm=30.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
+    agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
