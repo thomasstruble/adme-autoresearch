@@ -55,30 +55,18 @@ TARGET_COLS = [
 #
 EXTRA_FEATURES_FN = None
 
-# LogP extra feature — lipophilicity is the single strongest predictor for PXR binding
-from rdkit import Chem
-from rdkit.Chem import Descriptors as _Desc
-
-def logp_feature(smiles: str) -> np.ndarray | None:
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        return None
-    return np.array([_Desc.MolLogP(mol) / 5.0], dtype=np.float32)
-
-EXTRA_FEATURES_FN = logp_feature
-
 # ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
 # ---------------------------------------------------------------------------
 
 # Message passing
-DEPTH = 3               # number of bond message-passing steps
-HIDDEN_SIZE = 300       # hidden dimension in message passing layers
+DEPTH = 4               # number of bond message-passing steps
+HIDDEN_SIZE = 256       # hidden dimension in message passing layers
 DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
 FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
-FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN (None → same as HIDDEN_SIZE)
+FFN_HIDDEN_SIZE = 256   # hidden dimension in FFN (None → same as HIDDEN_SIZE)
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
 BATCH_SIZE = 32         # molecules per mini-batch
