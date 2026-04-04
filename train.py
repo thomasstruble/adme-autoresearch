@@ -73,7 +73,7 @@ FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 BATCH_SIZE = 64         # molecules per mini-batch
 WARMUP_EPOCHS = 2       # epochs of LR warm-up
 INIT_LR = 1e-4          # starting learning rate
-MAX_LR = 1.5e-3         # peak learning rate - larger batch can sustain higher LR
+MAX_LR = 2e-3           # peak learning rate - larger batch allows higher LR
 FINAL_LR = 1e-4         # final learning rate after decay
 
 # Misc
