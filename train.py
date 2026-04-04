@@ -165,7 +165,8 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
     from chemprop.models import MPNN
     from chemprop.nn import (
         BondMessagePassing,
-        MeanAggregation,
+        NormAggregation,
+        AttentiveAggregation,
         RegressionFFN,
         metrics as cp_metrics,
     )
@@ -176,7 +177,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         dropout=config.dropout,
     )
 
-    agg = MeanAggregation()
+    agg = AttentiveAggregation(output_size=config.hidden_size)
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
