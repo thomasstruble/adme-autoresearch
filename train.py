@@ -76,7 +76,7 @@ MAX_LR = 1e-3           # peak learning rate
 FINAL_LR = 1e-4         # final learning rate after decay
 
 # Misc
-BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
+BATCH_NORM = False      # apply batch normalisation on aggregated fingerprint
 NUM_WORKERS = 15         # dataloader workers (>0 is faster on Linux)
 SEED = 42
 
@@ -164,7 +164,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         hidden_dim=config.ffn_hidden_size,
         n_layers=config.ffn_num_layers,
         dropout=config.dropout,
-        task_weights=torch.tensor([2.0, 1.0]),  # emphasize pEC50 over Emax
     )
     if output_transform is not None:
         ffn_kwargs["output_transform"] = output_transform
