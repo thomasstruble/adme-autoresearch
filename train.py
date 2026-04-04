@@ -55,6 +55,18 @@ TARGET_COLS = [
 #
 EXTRA_FEATURES_FN = None
 
+# LogP extra feature — lipophilicity is the single strongest predictor for PXR binding
+from rdkit import Chem
+from rdkit.Chem import Descriptors as _Desc
+
+def logp_feature(smiles: str) -> np.ndarray | None:
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return None
+    return np.array([_Desc.MolLogP(mol) / 5.0], dtype=np.float32)
+
+EXTRA_FEATURES_FN = logp_feature
+
 # ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
 # ---------------------------------------------------------------------------
@@ -154,7 +166,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         depth=config.depth,
         d_h=config.hidden_size,
         dropout=config.dropout,
-        activation='leakyrelu',
     )
 
     agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
