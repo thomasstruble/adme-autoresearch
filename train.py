@@ -61,13 +61,13 @@ EXTRA_FEATURES_FN = None
 # ---------------------------------------------------------------------------
 
 # Message passing
-DEPTH = 3               # number of bond message-passing steps
-HIDDEN_SIZE = 350       # hidden dimension in message passing layers
+DEPTH = 4               # number of bond message-passing steps
+HIDDEN_SIZE = 300       # hidden dimension in message passing layers
 DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
 FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
-FFN_HIDDEN_SIZE = 350   # hidden dimension in FFN
+FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
 BATCH_SIZE = 64         # molecules per mini-batch
