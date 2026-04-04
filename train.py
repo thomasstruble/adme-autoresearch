@@ -39,21 +39,19 @@ TARGET_COLS = [
 # ---------------------------------------------------------------------------
 # Featurizer — define extra molecule-level features for MoleculeDatapoint.x_d
 # ---------------------------------------------------------------------------
-# Set to None to use no extra features (default chemprop graph features only).
-# To add features, define a function with signature:
-#   (smiles: str) -> np.ndarray | None
-# Return None to skip a molecule; return a 1-D float32 array otherwise.
-# Example using RDKit 2D descriptors:
-#
-#   from rdkit import Chem
-#   from rdkit.Chem import Descriptors
-#   def rdkit_descriptors(smiles: str):
-#       mol = Chem.MolFromSmiles(smiles)
-#       if mol is None:
-#           return None
-#       return np.array([v for _, v in Descriptors.descList], dtype=np.float32)
-#
-EXTRA_FEATURES_FN = None
+# Morgan binary fingerprints (radius=2, 1024 bits) as supplementary features.
+from chemprop.featurizers.molecule import MorganBinaryFeaturizer
+from chemprop.utils import make_mol as _make_mol
+
+_morgan = MorganBinaryFeaturizer(radius=2, length=1024)
+
+def morgan_fp(smiles: str):
+    mol = _make_mol(smiles, keep_h=False, add_h=False, ignore_stereo=False)
+    if mol is None:
+        return None
+    return _morgan(mol).astype(np.float32)
+
+EXTRA_FEATURES_FN = morgan_fp
 
 # ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
@@ -145,7 +143,7 @@ def build_model(config: MPNNConfig, output_transform=None):
     from chemprop.models import MPNN
     from chemprop.nn import (
         BondMessagePassing,
-        AttentiveAggregation,
+        NormAggregation,
         RegressionFFN,
         metrics as cp_metrics,
     )
@@ -156,7 +154,7 @@ def build_model(config: MPNNConfig, output_transform=None):
         dropout=config.dropout,
     )
 
-    agg = AttentiveAggregation(output_size=config.hidden_size)
+    agg = NormAggregation()
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
