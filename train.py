@@ -33,7 +33,7 @@ from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluat
 TARGET_COLS = [
     "pEC50",
     "Emax_estimate (log2FC vs. baseline)",
-    "Emax.vs.pos.ctrl_estimate (dimensionless)",
+    "Emax.vs.pos.ctrl_std.error (dimensionless)",
 ]
 # fmt: on
 
@@ -184,7 +184,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         hidden_dim=config.ffn_hidden_size,
         n_layers=config.ffn_num_layers,
         dropout=config.dropout,
-        task_weights=torch.tensor([1.5, 1.0, 0.5]),  # up-weight pEC50 in 3-task
     )
     if output_transform is not None:
         ffn_kwargs["output_transform"] = output_transform
