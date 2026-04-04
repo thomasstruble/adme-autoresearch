@@ -138,7 +138,7 @@ class TimeBudgetCallback(Callback):
 # Build model
 # ---------------------------------------------------------------------------
 
-def build_model(config: MPNNConfig, output_transform=None):
+def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int = 0):
     """Construct a chemprop MPNN for multi-task regression."""
     from chemprop.models import MPNN
     from chemprop.nn import (
@@ -158,7 +158,7 @@ def build_model(config: MPNNConfig, output_transform=None):
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
-        input_dim=config.hidden_size,
+        input_dim=config.hidden_size + n_extra_features,
         hidden_dim=config.ffn_hidden_size,
         n_layers=config.ffn_num_layers,
         dropout=config.dropout,
@@ -223,7 +223,10 @@ print(
 )
 
 # ---- Model -----------------------------------------------------------------
-model = build_model(config, output_transform=output_transform)
+# Detect extra feature dimension from the first training sample
+_sample_xd = train_dset[0].x_d
+n_extra = len(_sample_xd) if _sample_xd is not None else 0
+model = build_model(config, output_transform=output_transform, n_extra_features=n_extra)
 
 n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print(f"Trainable parameters: {n_params:,}")
