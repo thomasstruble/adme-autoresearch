@@ -76,7 +76,7 @@ MAX_LR = 1e-3           # peak learning rate
 FINAL_LR = 1e-4         # final learning rate after decay
 
 # Misc
-BATCH_NORM = False      # apply batch normalisation on aggregated fingerprint
+BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
 NUM_WORKERS = 15         # dataloader workers (>0 is faster on Linux)
 SEED = 42
 
@@ -251,6 +251,7 @@ trainer = pl.Trainer(
     logger=True,
     enable_checkpointing=False,
     enable_progress_bar=True,
+    gradient_clip_val=1.0,
     callbacks=[time_callback],
 )
 
