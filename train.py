@@ -32,6 +32,8 @@ from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluat
 # fmt: off
 TARGET_COLS = [
     "pEC50",
+    "pEC50_ci.lower (-log10(molarity))",
+    "pEC50_ci.upper (-log10(molarity))",
     "Emax_estimate (log2FC vs. baseline)",
 ]
 # fmt: on
@@ -275,7 +277,6 @@ trainer = pl.Trainer(
     enable_checkpointing=False,
     enable_progress_bar=True,
     callbacks=[time_callback],
-    accumulate_grad_batches=2,
 )
 
 print(f"\nStarting training (accelerator={accelerator}, max wall-clock={TIME_BUDGET}s)…\n")
