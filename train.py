@@ -32,7 +32,9 @@ from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluat
 # fmt: off
 TARGET_COLS = [
     "pEC50",
-    "Emax_estimate (log2FC vs. baseline)",
+    "Emax.vs.pos.ctrl_estimate (dimensionless)",
+    "Emax.vs.pos.ctrl_ci.upper (dimensionless)",
+    "Emax.vs.pos.ctrl_ci.lower (dimensionless)",
 ]
 # fmt: on
 
