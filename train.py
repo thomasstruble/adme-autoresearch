@@ -142,13 +142,27 @@ class TimeBudgetCallback(Callback):
 
 def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int = 0):
     """Construct a chemprop MPNN for multi-task regression."""
+    import torch.optim as optim
     from chemprop.models import MPNN
+    from chemprop.schedulers import build_NoamLike_LRSched
     from chemprop.nn import (
         BondMessagePassing,
         NormAggregation,
         RegressionFFN,
         metrics as cp_metrics,
     )
+
+    class MPNNWithAdamW(MPNN):
+        def configure_optimizers(self):
+            opt = optim.AdamW(self.parameters(), self.init_lr, weight_decay=1e-4)
+            steps_per_epoch = self.trainer.num_training_batches
+            warmup_steps = self.warmup_epochs * steps_per_epoch
+            cooldown_epochs = self.trainer.max_epochs - self.warmup_epochs
+            cooldown_steps = cooldown_epochs * steps_per_epoch
+            lr_sched = build_NoamLike_LRSched(
+                opt, warmup_steps, cooldown_steps, self.init_lr, self.max_lr, self.final_lr
+            )
+            return {"optimizer": opt, "lr_scheduler": {"scheduler": lr_sched, "interval": "step"}}
 
     mp = BondMessagePassing(
         depth=config.depth,
@@ -170,7 +184,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    model = MPNN(
+    model = MPNNWithAdamW(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
