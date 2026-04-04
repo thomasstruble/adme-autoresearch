@@ -73,7 +73,7 @@ FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 BATCH_SIZE = 64         # molecules per mini-batch
 WARMUP_EPOCHS = 2       # epochs of LR warm-up
 INIT_LR = 1e-4          # starting learning rate
-MAX_LR = 1.2e-3         # peak learning rate
+MAX_LR = 1e-3           # peak learning rate
 FINAL_LR = 1e-4         # final learning rate after decay
 
 # Misc
@@ -164,13 +164,14 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
     """Construct a chemprop MPNN for multi-task regression."""
     from chemprop.models import MPNN
     from chemprop.nn import (
+        AtomMessagePassing,
         BondMessagePassing,
         NormAggregation,
         RegressionFFN,
         metrics as cp_metrics,
     )
 
-    mp = BondMessagePassing(
+    mp = AtomMessagePassing(
         depth=config.depth,
         d_h=config.hidden_size,
         dropout=config.dropout,
