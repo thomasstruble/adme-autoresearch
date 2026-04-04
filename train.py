@@ -65,7 +65,7 @@ HIDDEN_SIZE = 300       # hidden dimension in message passing layers
 DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
-FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
+FFN_NUM_LAYERS = 3      # number of FFN layers after aggregation
 FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN (None → same as HIDDEN_SIZE)
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
@@ -154,7 +154,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         depth=config.depth,
         d_h=config.hidden_size,
         dropout=config.dropout,
-        activation="elu",
     )
 
     agg = NormAggregation()
