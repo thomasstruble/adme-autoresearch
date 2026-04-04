@@ -32,6 +32,7 @@ from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluat
 # fmt: off
 TARGET_COLS = [
     "pEC50",
+    "Emax_estimate (log2FC vs. baseline)",
 ]
 # fmt: on
 
@@ -60,12 +61,12 @@ EXTRA_FEATURES_FN = None
 
 # Message passing
 DEPTH = 3               # number of bond message-passing steps
-HIDDEN_SIZE = 300       # hidden dimension in message passing layers
+HIDDEN_SIZE = 256       # hidden dimension in message passing layers
 DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
 FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
-FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN (None → same as HIDDEN_SIZE)
+FFN_HIDDEN_SIZE = 256   # hidden dimension in FFN (None → same as HIDDEN_SIZE)
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
 BATCH_SIZE = 32         # molecules per mini-batch
