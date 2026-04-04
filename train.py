@@ -55,6 +55,25 @@ TARGET_COLS = [
 #
 EXTRA_FEATURES_FN = None
 
+# Physicochemical descriptor featurizer (MolWt, LogP, HBD, HBA, TPSA)
+# These 5 features are ADME-relevant and directly informative for PXR binding.
+from rdkit import Chem
+from rdkit.Chem import Descriptors, rdMolDescriptors
+
+def physchem_features(smiles: str) -> np.ndarray | None:
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return None
+    return np.array([
+        Descriptors.MolWt(mol) / 500.0,
+        Descriptors.MolLogP(mol) / 5.0,
+        rdMolDescriptors.CalcNumHBD(mol) / 5.0,
+        rdMolDescriptors.CalcNumHBA(mol) / 10.0,
+        Descriptors.TPSA(mol) / 100.0,
+    ], dtype=np.float32)
+
+EXTRA_FEATURES_FN = physchem_features
+
 # ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
 # ---------------------------------------------------------------------------
@@ -144,13 +163,13 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
     """Construct a chemprop MPNN for multi-task regression."""
     from chemprop.models import MPNN
     from chemprop.nn import (
-        AtomMessagePassing,
+        BondMessagePassing,
         NormAggregation,
         RegressionFFN,
         metrics as cp_metrics,
     )
 
-    mp = AtomMessagePassing(
+    mp = BondMessagePassing(
         depth=config.depth,
         d_h=config.hidden_size,
         dropout=config.dropout,
