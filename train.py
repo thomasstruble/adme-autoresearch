@@ -67,7 +67,7 @@ DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
 FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
-FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
+FFN_HIDDEN_SIZE = 400   # hidden dimension in FFN
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
 BATCH_SIZE = 64         # molecules per mini-batch
@@ -79,7 +79,7 @@ FINAL_LR = 1e-4         # final learning rate after decay
 # Misc
 BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
 NUM_WORKERS = 15         # dataloader workers (>0 is faster on Linux)
-SEED = 99
+SEED = 42
 
 # ---------------------------------------------------------------------------
 # Model config (read-only after build — logged at startup)
