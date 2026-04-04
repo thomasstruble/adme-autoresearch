@@ -183,22 +183,14 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         hidden_dim=config.ffn_hidden_size,
         n_layers=config.ffn_num_layers,
         dropout=config.dropout,
+        criterion=cp_metrics.MAE(),
     )
     if output_transform is not None:
         ffn_kwargs["output_transform"] = output_transform
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    class CosineAnnealMPNN(MPNN):
-        """MPNN with cosine annealing LR schedule instead of Noam."""
-        def configure_optimizers(self):
-            opt = torch.optim.Adam(self.parameters(), lr=self.max_lr)
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                opt, T_max=self.trainer.max_epochs, eta_min=self.final_lr
-            )
-            return {"optimizer": opt, "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"}}
-
-    model = CosineAnnealMPNN(
+    model = MPNN(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
