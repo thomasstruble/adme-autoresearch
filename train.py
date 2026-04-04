@@ -185,6 +185,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         hidden_dim=config.ffn_hidden_size,
         n_layers=config.ffn_num_layers,
         dropout=config.dropout,
+        task_weights=torch.tensor([1.5, 1.0, 0.5]),
     )
     if output_transform is not None:
         ffn_kwargs["output_transform"] = output_transform
@@ -201,7 +202,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         max_lr=config.max_lr,
         final_lr=config.final_lr,
         metrics=[cp_metrics.RMSE(), cp_metrics.MAE()],
-        task_weights=torch.tensor([1.5, 1.0, 0.5]),
     )
     return model
 
