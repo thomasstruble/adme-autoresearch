@@ -244,7 +244,11 @@ print(
 )
 
 # ---- Model -----------------------------------------------------------------
-model = build_model(config, output_transform=output_transform)
+_n_extra = 0
+if EXTRA_FEATURES_FN is not None:
+    _test_feat = EXTRA_FEATURES_FN("C")
+    _n_extra = len(_test_feat) if _test_feat is not None else 0
+model = build_model(config, output_transform=output_transform, n_extra_features=_n_extra)
 
 n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print(f"Trainable parameters: {n_params:,}")
