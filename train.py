@@ -62,7 +62,7 @@ EXTRA_FEATURES_FN = None
 # Message passing
 DEPTH = 3               # number of bond message-passing steps
 HIDDEN_SIZE = 300       # hidden dimension in message passing layers
-DROPOUT = 0.0           # dropout applied in both MP and FFN
+DROPOUT = 0.1           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
 FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
@@ -154,7 +154,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         depth=config.depth,
         d_h=config.hidden_size,
         dropout=config.dropout,
-        bias=True,
     )
 
     agg = NormAggregation()
