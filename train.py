@@ -78,7 +78,7 @@ FINAL_LR = 1e-4         # final learning rate after decay
 # Misc
 BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
 NUM_WORKERS = 15         # dataloader workers (>0 is faster on Linux)
-SEED = 123
+SEED = 42
 
 # ---------------------------------------------------------------------------
 # Model config (read-only after build — logged at startup)
@@ -211,7 +211,7 @@ t_start = time.time()
 torch.manual_seed(SEED)
 if torch.cuda.is_available():
     torch.cuda.manual_seed(SEED)
-torch.set_float32_matmul_precision("high")
+torch.set_float32_matmul_precision("highest")
 
 config = MPNNConfig()
 print(f"MPNNConfig: {asdict(config)}")
