@@ -69,7 +69,7 @@ FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
 FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
-BATCH_SIZE = 40         # molecules per mini-batch
+BATCH_SIZE = 32         # molecules per mini-batch
 WARMUP_EPOCHS = 2       # epochs of LR warm-up
 INIT_LR = 1e-4          # starting learning rate
 MAX_LR = 1e-3           # peak learning rate
@@ -249,6 +249,9 @@ if EXTRA_FEATURES_FN is not None:
     _test_feat = EXTRA_FEATURES_FN("C")
     _n_extra = len(_test_feat) if _test_feat is not None else 0
 model = build_model(config, output_transform=output_transform, n_extra_features=_n_extra)
+# Replace BatchNorm1d with LayerNorm for better small-batch behavior
+import torch.nn as nn
+model.bn = nn.LayerNorm(model.message_passing.output_dim)
 
 n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print(f"Trainable parameters: {n_params:,}")
