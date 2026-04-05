@@ -278,6 +278,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         d_h=config.hidden_size,
         dropout=config.dropout,
         d_vd=n_atom_descriptors if n_atom_descriptors > 0 else None,
+        activation='elu',  # ELU in message passing (never tried; FFN keeps default ReLU)
     )
 
     agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
@@ -415,7 +416,7 @@ devices = 1
 # Chemprop default is ~max_epochs=50 – we set a large ceiling and rely on time.
 MAX_EPOCHS = 500
 
-best_val_callback = EMACallback(decay=0.999)
+best_val_callback = BestValLossCallback()
 
 trainer = pl.Trainer(
     accelerator=accelerator,
