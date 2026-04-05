@@ -34,7 +34,6 @@ TARGET_COLS = [
     "pEC50",
     "Emax.vs.pos.ctrl_estimate (dimensionless)",
     "Emax.vs.pos.ctrl_ci.upper (dimensionless)",
-    "Emax.vs.pos.ctrl_std.error (dimensionless)",
 ]
 # fmt: on
 
@@ -203,6 +202,20 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         final_lr=config.final_lr,
         metrics=[cp_metrics.RMSE(), cp_metrics.MAE()],
     )
+
+    # Override optimizer to use AdamW
+    import torch.optim as optim
+    _orig_configure_optimizers = model.configure_optimizers
+    def _configure_optimizers_adamw(self=model):
+        result = _orig_configure_optimizers()
+        # Replace Adam with AdamW in the optimizers
+        opt = result["optimizer"]
+        new_opt = optim.AdamW(model.parameters(), lr=opt.defaults["lr"], weight_decay=1e-4)
+        result["optimizer"] = new_opt
+        return result
+    import types
+    model.configure_optimizers = types.MethodType(lambda self: _configure_optimizers_adamw(), model)
+
     return model
 
 
