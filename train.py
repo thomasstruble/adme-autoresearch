@@ -85,7 +85,7 @@ FINAL_LR = 1e-4         # final learning rate after decay
 # Misc
 BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
 NUM_WORKERS = 15         # dataloader workers (>0 is faster on Linux)
-SEED = 42
+SEED = 0
 
 # ---------------------------------------------------------------------------
 # Model config (read-only after build — logged at startup)
@@ -211,7 +211,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         init_lr=config.init_lr,
         max_lr=config.max_lr,
         final_lr=config.final_lr,
-        metrics=[cp_metrics.RMSE()],
+        metrics=[cp_metrics.RMSE(), cp_metrics.MAE()],
     )
     return model
 
