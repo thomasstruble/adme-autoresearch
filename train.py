@@ -25,23 +25,31 @@ import torch.nn.functional as F
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks import Callback, StochasticWeightAveraging
 
-from chemprop.nn.metrics import ChempropMetric
-
 from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluate_regression
 
 
 # ---------------------------------------------------------------------------
-# Custom Huber (smooth L1) criterion for training
+# NoisyMPNN — adds Gaussian noise to fingerprint during training only
 # ---------------------------------------------------------------------------
 
-class HuberCriterion(ChempropMetric):
-    """Huber loss: MSE for |error| < delta, MAE-like for large errors."""
-    def __init__(self, delta: float = 1.0, task_weights=1.0):
-        super().__init__(task_weights=task_weights)
-        self.delta = delta
+class NoisyMPNN:
+    """Mixin: adds Gaussian noise to fingerprint Z during training_step."""
+    noise_std: float = 0.05
 
-    def _calc_unreduced_loss(self, preds, targets, mask, weights, lt_mask, gt_mask):
-        return F.huber_loss(preds, targets, reduction="none", delta=self.delta)
+    def training_step(self, batch, batch_idx):
+        batch_size = self.get_batch_size(batch)
+        bmg, V_d, X_d, targets, weights, lt_mask, gt_mask = batch
+
+        mask = targets.isfinite()
+        targets = targets.nan_to_num(nan=0.0)
+
+        Z = self.fingerprint(bmg, V_d, X_d)
+        Z = Z + torch.randn_like(Z) * self.noise_std  # inject noise
+        preds = self.predictor.train_step(Z)
+        l = self.criterion(preds, targets, mask, weights, lt_mask, gt_mask)
+
+        self.log("train_loss", self.criterion, batch_size=batch_size, prog_bar=True, on_epoch=True)
+        return l
 
 # ---------------------------------------------------------------------------
 # Target columns — pick any subset of AVAILABLE_TARGET_COLS
@@ -194,6 +202,10 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         metrics as cp_metrics,
     )
 
+    # Dynamically create a NoisyMPNN class mixing NoisyMPNN mixin with MPNN
+    class NoiseMPNN(NoisyMPNN, MPNN):
+        pass
+
     mp = AtomMessagePassing(
         depth=config.depth,
         d_v=d_v,
@@ -213,14 +225,13 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         hidden_dim=config.ffn_hidden_size,
         n_layers=config.ffn_num_layers,
         dropout=config.dropout,
-        criterion=HuberCriterion(delta=1.0),
     )
     if output_transform is not None:
         ffn_kwargs["output_transform"] = output_transform
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    model = MPNN(
+    model = NoiseMPNN(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
