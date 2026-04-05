@@ -170,7 +170,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         RegressionFFN,
         metrics as cp_metrics,
     )
-    from chemprop.nn.agg import AttentiveAggregation
+    from chemprop.nn.agg import MeanAggregation
 
     mp = AtomMessagePassing(
         depth=config.depth,
@@ -178,7 +178,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         dropout=config.dropout,
     )
 
-    agg = AttentiveAggregation(output_size=config.hidden_size)
+    agg = MeanAggregation()
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
