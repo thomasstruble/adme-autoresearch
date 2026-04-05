@@ -25,6 +25,42 @@ import lightning.pytorch as pl
 from lightning.pytorch.callbacks import Callback, StochasticWeightAveraging
 
 from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluate_regression
+
+
+# ---------------------------------------------------------------------------
+# MixupMPNN — Mixup augmentation on molecular fingerprints during training
+# Z_mixed = λ*Z_a + (1-λ)*Z_b, y_mixed = λ*y_a + (1-λ)*y_b, λ~Beta(0.2,0.2)
+# ---------------------------------------------------------------------------
+
+class MixupMPNN:
+    """Mixin: fingerprint-space Mixup augmentation for better generalization."""
+
+    def training_step(self, batch, batch_idx):
+        batch_size = self.get_batch_size(batch)
+        bmg, V_d, X_d, targets, weights, lt_mask, gt_mask = batch
+
+        Z = self.fingerprint(bmg, V_d, X_d)
+
+        # Sample mixing coefficient from Beta(0.2, 0.2) — mostly "pure" samples
+        lam = float(torch.distributions.Beta(0.2, 0.2).sample())
+        lam = max(lam, 1 - lam)  # always mix toward dominant sample
+        idx = torch.randperm(Z.size(0), device=Z.device)
+
+        Z_mixed = lam * Z + (1 - lam) * Z[idx]
+
+        # Mix targets; only use positions where BOTH samples have valid labels
+        mask_a = targets.isfinite()
+        mask_b = targets[idx].isfinite()
+        mask_mixed = mask_a & mask_b
+        t_a = targets.nan_to_num(nan=0.0)
+        t_b = targets[idx].nan_to_num(nan=0.0)
+        targets_mixed = lam * t_a + (1 - lam) * t_b
+
+        preds = self.predictor.train_step(Z_mixed)
+        l = self.criterion(preds, targets_mixed, mask_mixed, weights, lt_mask, gt_mask)
+
+        self.log("train_loss", self.criterion, batch_size=batch_size, prog_bar=True, on_epoch=True)
+        return l
 # ---------------------------------------------------------------------------
 # Target columns — pick any subset of AVAILABLE_TARGET_COLS
 # ---------------------------------------------------------------------------
@@ -177,6 +213,9 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         metrics as cp_metrics,
     )
 
+    class MixupModel(MixupMPNN, MPNN):
+        pass
+
     mp = AtomMessagePassing(
         depth=config.depth,
         d_v=d_v,
@@ -185,7 +224,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         d_vd=n_atom_descriptors if n_atom_descriptors > 0 else None,
     )
 
-    agg = SumAggregation()  # raw sum preserves molecular-size information (never tried)
+    agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
 
     agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
 
@@ -204,7 +243,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    model = MPNN(
+    model = MixupModel(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
