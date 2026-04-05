@@ -85,7 +85,7 @@ FINAL_LR = 1e-4         # final learning rate after decay
 # Misc
 BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
 NUM_WORKERS = 15         # dataloader workers (>0 is faster on Linux)
-SEED = 1
+SEED = 2
 
 # ---------------------------------------------------------------------------
 # Model config (read-only after build — logged at startup)
