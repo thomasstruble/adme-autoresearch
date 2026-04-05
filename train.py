@@ -59,7 +59,7 @@ EXTRA_FEATURES_FN = None
 # ---------------------------------------------------------------------------
 # Gasteiger charges as per-atom vertex descriptors (V_d)
 # ---------------------------------------------------------------------------
-USE_GASTEIGER_VD = True   # set to True to add Gasteiger charges as V_d
+USE_GASTEIGER_VD = False  # set to True to add Gasteiger charges as V_d
 
 # ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
@@ -306,6 +306,9 @@ devices = 1
 # Chemprop default is ~max_epochs=50 – we set a large ceiling and rely on time.
 MAX_EPOCHS = 500
 
+from lightning.pytorch.callbacks import StochasticWeightAveraging
+swa_callback = StochasticWeightAveraging(swa_lrs=1e-4, swa_epoch_start=0.75)
+
 trainer = pl.Trainer(
     accelerator=accelerator,
     devices=devices,
@@ -313,7 +316,7 @@ trainer = pl.Trainer(
     logger=True,
     enable_checkpointing=False,
     enable_progress_bar=True,
-    callbacks=[time_callback],
+    callbacks=[time_callback, swa_callback],
 )
 
 print(f"\nStarting training (accelerator={accelerator}, max wall-clock={TIME_BUDGET}s)…\n")
