@@ -62,7 +62,7 @@ EXTRA_FEATURES_FN = None
 
 # Message passing
 DEPTH = 3               # number of bond message-passing steps
-HIDDEN_SIZE = 300       # hidden dimension in message passing layers
+HIDDEN_SIZE = 290       # hidden dimension in message passing layers
 DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
@@ -72,7 +72,7 @@ FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
 BATCH_SIZE = 64         # molecules per mini-batch
 WARMUP_EPOCHS = 2       # epochs of LR warm-up
-INIT_LR = 1.5e-4        # starting learning rate
+INIT_LR = 1e-4          # starting learning rate
 MAX_LR = 8e-4           # peak learning rate
 FINAL_LR = 1e-4         # final learning rate after decay
 
