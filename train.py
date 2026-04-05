@@ -88,7 +88,7 @@ SEED = 42
 
 # Task weights — relative loss weight per output task (same order as TARGET_COLS)
 # Default [1,1,1] treats all tasks equally. Upweight pEC50 to prioritise it.
-TASK_WEIGHTS = [3.0, 1.0, 1.0]
+TASK_WEIGHTS = [2.0, 1.0, 1.0]
 
 # Ensemble: train multiple models with different seeds and average predictions
 ENSEMBLE_SEEDS = [SEED]           # single model (set to [42, 0] etc. for ensemble)
