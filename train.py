@@ -177,7 +177,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         dropout=config.dropout,
     )
 
-    agg = NormAggregation(norm=20.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
+    agg = NormAggregation(norm=30.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
