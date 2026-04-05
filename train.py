@@ -436,21 +436,25 @@ total_training_time = time_callback.total_training_seconds
 num_epochs = trainer.current_epoch + 1
 
 # ---------------------------------------------------------------------------
-# Stage 2: FFN-only pEC50 fine-tuning (20s, frozen message passing + agg)
+# Stage 2: pEC50 output-row-only fine-tuning (20s)
 # ---------------------------------------------------------------------------
-# BestValLossCallback already restored the best multi-task weights.
-# Now freeze MP+agg and fine-tune only the FFN with lower LR on pEC50 only.
+# BestValLossCallback restored best multi-task weights.
+# Only update the pEC50 row of the final output linear layer;
+# all other weights (MP, agg, FFN hidden, other output rows) stay frozen.
 FINE_TUNE2_SECS = 20
-print(f"\n[Stage 2] FFN-only pEC50 fine-tune for {FINE_TUNE2_SECS}s…")
+print(f"\n[Stage 2] pEC50 output-row fine-tune for {FINE_TUNE2_SECS}s…")
 model.train()
-for name, param in model.named_parameters():
-    if "message_passing" in name or "agg" in name:
-        param.requires_grad_(False)
-
-_ft_opt = torch.optim.Adam(
-    [p for p in model.parameters() if p.requires_grad], lr=1e-4
-)
 _pec50_idx = TARGET_COLS.index("pEC50")
+# Identify the final output weight/bias in the predictor FFN
+_out_w = model.predictor.ffn[-1][-1].weight  # [n_tasks, hidden_dim]
+_out_b = model.predictor.ffn[-1][-1].bias    # [n_tasks]
+# Freeze ALL parameters, then re-enable only output layer
+for param in model.parameters():
+    param.requires_grad_(False)
+_out_w.requires_grad_(True)
+_out_b.requires_grad_(True)
+
+_ft_opt = torch.optim.Adam([_out_w, _out_b], lr=5e-4)
 _ft_start = time.time()
 _ft_criterion = torch.nn.MSELoss()
 device = next(model.parameters()).device
@@ -462,7 +466,6 @@ while time.time() - _ft_start < FINE_TUNE2_SECS:
         if device.type == "cuda":
             bmg = bmg.to(device)
         preds = model(bmg, V_d, X_d)
-        # Compute MSE on pEC50 only, ignoring NaN targets
         gt = targets[:, _pec50_idx]
         pr = preds[:, _pec50_idx]
         mask = gt.isfinite()
@@ -471,9 +474,14 @@ while time.time() - _ft_start < FINE_TUNE2_SECS:
         loss = _ft_criterion(pr[mask], gt[mask])
         _ft_opt.zero_grad()
         loss.backward()
+        # Zero out non-pEC50 row gradients
+        if _out_w.grad is not None:
+            _out_w.grad[[i for i in range(_out_w.shape[0]) if i != _pec50_idx]] = 0
+        if _out_b.grad is not None:
+            _out_b.grad[[i for i in range(_out_b.shape[0]) if i != _pec50_idx]] = 0
         _ft_opt.step()
 
-# Re-enable all parameters
+# Re-enable all parameters for evaluation
 for param in model.parameters():
     param.requires_grad_(True)
 print(f"  Stage 2 done in {time.time()-_ft_start:.1f}s")
