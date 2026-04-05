@@ -175,7 +175,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         depth=config.depth,
         d_h=config.hidden_size,
         dropout=config.dropout,
-        activation="leakyrelu",
     )
 
     agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
@@ -278,6 +277,7 @@ trainer = pl.Trainer(
     enable_checkpointing=False,
     enable_progress_bar=True,
     callbacks=[time_callback],
+    accumulate_grad_batches=2,
 )
 
 print(f"\nStarting training (accelerator={accelerator}, max wall-clock={TIME_BUDGET}s)…\n")
