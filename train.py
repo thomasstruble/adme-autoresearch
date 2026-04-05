@@ -63,7 +63,7 @@ EXTRA_FEATURES_FN = None
 # Message passing
 DEPTH = 3               # number of bond message-passing steps
 HIDDEN_SIZE = 300       # hidden dimension in message passing layers
-DROPOUT = 0.0           # dropout applied in both MP and FFN
+DROPOUT = 0.02          # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
 FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
@@ -185,7 +185,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         hidden_dim=config.ffn_hidden_size,
         n_layers=config.ffn_num_layers,
         dropout=config.dropout,
-        task_weights=torch.tensor([2.0, 1.0, 1.0]),
     )
     if output_transform is not None:
         ffn_kwargs["output_transform"] = output_transform
