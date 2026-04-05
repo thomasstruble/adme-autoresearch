@@ -21,7 +21,6 @@ from dataclasses import dataclass, asdict
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks import Callback, StochasticWeightAveraging
 
@@ -29,27 +28,20 @@ from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluat
 
 
 # ---------------------------------------------------------------------------
-# NoisyMPNN — adds Gaussian noise to fingerprint during training only
+# MABAtomMPWrapper — MABAtomMessagePassing with standard MPNN-compatible interface
+# Adds a final W_vo(x_v || m_v^T) → h output layer vs standard AtomMP
 # ---------------------------------------------------------------------------
 
-class NoisyMPNN:
-    """Mixin: adds Gaussian noise to fingerprint Z during training_step."""
-    noise_std: float = 0.05
+class MABAtomMPWrapper:
+    """Mixin: override output_dim and forward so MPNN can use MABAtomMessagePassing."""
 
-    def training_step(self, batch, batch_idx):
-        batch_size = self.get_batch_size(batch)
-        bmg, V_d, X_d, targets, weights, lt_mask, gt_mask = batch
+    @property
+    def output_dim(self):
+        return self.output_dims[0]
 
-        mask = targets.isfinite()
-        targets = targets.nan_to_num(nan=0.0)
-
-        Z = self.fingerprint(bmg, V_d, X_d)
-        Z = Z + torch.randn_like(Z) * self.noise_std  # inject noise
-        preds = self.predictor.train_step(Z)
-        l = self.criterion(preds, targets, mask, weights, lt_mask, gt_mask)
-
-        self.log("train_loss", self.criterion, batch_size=batch_size, prog_bar=True, on_epoch=True)
-        return l
+    def forward(self, bmg, V_d=None):
+        H_v, _ = super().forward(bmg, V_d)
+        return H_v
 
 # ---------------------------------------------------------------------------
 # Target columns — pick any subset of AVAILABLE_TARGET_COLS
@@ -196,17 +188,18 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
     from chemprop.models import MPNN
     from chemprop.nn import (
         AtomMessagePassing,
+        MABAtomMessagePassing,
         BondMessagePassing,
         NormAggregation,
         RegressionFFN,
         metrics as cp_metrics,
     )
 
-    # Dynamically create a NoisyMPNN class mixing NoisyMPNN mixin with MPNN
-    class NoiseMPNN(NoisyMPNN, MPNN):
+    # MABAtomMessagePassing subclass with MPNN-compatible interface
+    class WrappedMABAtomMP(MABAtomMPWrapper, MABAtomMessagePassing):
         pass
 
-    mp = AtomMessagePassing(
+    mp = WrappedMABAtomMP(
         depth=config.depth,
         d_v=d_v,
         d_h=config.hidden_size,
@@ -231,7 +224,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    model = NoiseMPNN(
+    model = MPNN(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
