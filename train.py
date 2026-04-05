@@ -232,13 +232,14 @@ val_dset   = val_loader.dataset
 test_dset  = test_loader.dataset
 
 # ---- SMILES augmentation: add 1 randomized SMILES per train molecule --------
-from chemprop.data import MoleculeDatapoint
+from chemprop.data import MoleculeDatapoint, MoleculeDataset
 from rdkit.Chem import MolToSmiles
 import random as _rnd
 
 _rnd.seed(SEED)
+_orig_dps = list(train_dset.data)
 _aug_dps = []
-for dp in list(train_dset.data):
+for dp in _orig_dps:
     if dp.mol is None:
         continue
     try:
@@ -247,12 +248,14 @@ for dp in list(train_dset.data):
         _aug_dps.append(aug_dp)
     except Exception:
         pass
-train_dset.data.extend(_aug_dps)
-print(f"SMILES augmentation: added {len(_aug_dps):,} augmented molecules (train now {len(train_dset):,})")
+# Rebuild dataset with original + augmented datapoints (resets cached _Y)
+_combined = MoleculeDataset(_orig_dps + _aug_dps)
+print(f"SMILES augmentation: {len(_orig_dps):,} original + {len(_aug_dps):,} augmented = {len(_combined):,} total")
 
-# Rebuild train_loader with augmented dataset
+# Rebuild train_loader with augmented dataset (must be BEFORE normalize_targets)
 from chemprop.data import build_dataloader as _build_dl
-train_loader = _build_dl(train_dset, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, shuffle=True)
+train_loader = _build_dl(_combined, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, shuffle=True)
+train_dset = train_loader.dataset
 
 # ---- Target scaling (fit on train, apply to val + test; inverse baked into model) --
 from chemprop.nn.transforms import UnscaleTransform
