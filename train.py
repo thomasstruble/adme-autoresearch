@@ -160,7 +160,7 @@ class BestValLossCallback(Callback):
             pl_module.load_state_dict(self._best_state)
             print(f"  [BestValLoss] Restored weights from best val_loss={self.best_val_loss:.6f}")
 
-FINE_TUNE_SECS = 45  # last N seconds of training devoted to pEC50-only fine-tuning
+FINE_TUNE_SECS = 90  # last N seconds of training devoted to pEC50-only fine-tuning
 
 
 class TwoStageMixin:
