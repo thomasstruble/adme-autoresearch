@@ -87,7 +87,7 @@ DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
 FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
-FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
+FFN_HIDDEN_SIZE = 400   # hidden dimension in FFN — larger to handle 500-dim input
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
 BATCH_SIZE = 64         # molecules per mini-batch
