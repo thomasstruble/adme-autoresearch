@@ -86,6 +86,10 @@ BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
 NUM_WORKERS = 15         # dataloader workers (>0 is faster on Linux)
 SEED = 42
 
+# Task weights — relative loss weight per output task (same order as TARGET_COLS)
+# Default [1,1,1] treats all tasks equally. Upweight pEC50 to prioritise it.
+TASK_WEIGHTS = [3.0, 1.0, 1.0]
+
 # Ensemble: train multiple models with different seeds and average predictions
 ENSEMBLE_SEEDS = [SEED]           # single model (set to [42, 0] etc. for ensemble)
 BUDGET_PER_MODEL = TIME_BUDGET    # wall-clock seconds per ensemble member
@@ -265,7 +269,7 @@ class TwoStageMixin:
 
 
 
-def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int = 0, n_atom_descriptors: int = 0, d_v: int = 72):
+def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int = 0, n_atom_descriptors: int = 0, d_v: int = 72, task_weights=None):
     """Construct a chemprop MPNN for multi-task regression."""
     from chemprop.models import MPNN
     from chemprop.nn import (
@@ -284,7 +288,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         d_vd=n_atom_descriptors if n_atom_descriptors > 0 else None,
     )
 
-    agg = NormAggregation(norm=20.0)  # drug-like molecules; tuning from default 25
+    agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
 
     # mp.output_dim = hidden_size + n_atom_descriptors when d_vd is set
     ffn_input_dim = mp.output_dim + n_extra_features
@@ -298,6 +302,8 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
     )
     if output_transform is not None:
         ffn_kwargs["output_transform"] = output_transform
+    if task_weights is not None:
+        ffn_kwargs["task_weights"] = torch.tensor(task_weights, dtype=torch.float32)
 
     ffn = RegressionFFN(**ffn_kwargs)
 
@@ -397,7 +403,7 @@ _n_extra = 0
 if EXTRA_FEATURES_FN is not None:
     _test_feat = EXTRA_FEATURES_FN("C")
     _n_extra = len(_test_feat) if _test_feat is not None else 0
-_sample_model = build_model(config, output_transform=output_transform, n_extra_features=_n_extra, n_atom_descriptors=_n_atom_desc, d_v=_d_v)
+_sample_model = build_model(config, output_transform=output_transform, n_extra_features=_n_extra, n_atom_descriptors=_n_atom_desc, d_v=_d_v, task_weights=TASK_WEIGHTS)
 n_params = sum(p.numel() for p in _sample_model.parameters() if p.requires_grad)
 print(f"Trainable parameters per model: {n_params:,}")
 del _sample_model
@@ -421,7 +427,7 @@ for _ens_idx, _ens_seed in enumerate(ENSEMBLE_SEEDS):
     if torch.cuda.is_available():
         torch.cuda.manual_seed(_ens_seed)
 
-    _model = build_model(config, output_transform=output_transform, n_extra_features=_n_extra, n_atom_descriptors=_n_atom_desc, d_v=_d_v)
+    _model = build_model(config, output_transform=output_transform, n_extra_features=_n_extra, n_atom_descriptors=_n_atom_desc, d_v=_d_v, task_weights=TASK_WEIGHTS)
 
     _time_cb = TimeBudgetCallback(budget_seconds=BUDGET_PER_MODEL)
     _best_val_cb = BestValLossCallback()
