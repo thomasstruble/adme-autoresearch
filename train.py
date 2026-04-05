@@ -62,7 +62,7 @@ EXTRA_FEATURES_FN = None
 
 # Message passing
 DEPTH = 3               # number of bond message-passing steps
-HIDDEN_SIZE = 320       # hidden dimension in message passing layers
+HIDDEN_SIZE = 300       # hidden dimension in message passing layers
 DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
@@ -77,7 +77,7 @@ MAX_LR = 1e-3           # peak learning rate
 FINAL_LR = 1e-4         # final learning rate after decay
 
 # Misc
-BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
+BATCH_NORM = False      # apply batch normalisation on aggregated fingerprint
 NUM_WORKERS = 15         # dataloader workers (>0 is faster on Linux)
 SEED = 42
 
