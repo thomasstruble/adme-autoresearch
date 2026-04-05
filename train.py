@@ -86,6 +86,10 @@ BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
 NUM_WORKERS = 15         # dataloader workers (>0 is faster on Linux)
 SEED = 42
 
+# Ensemble: train multiple models with different seeds and average predictions
+ENSEMBLE_SEEDS = [42, 0]      # seeds for ensemble members
+BUDGET_PER_MODEL = 140        # wall-clock seconds allocated per ensemble member
+
 # ---------------------------------------------------------------------------
 # Model config (read-only after build — logged at startup)
 # ---------------------------------------------------------------------------
@@ -316,9 +320,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 # ---------------------------------------------------------------------------
 
 t_start = time.time()
-torch.manual_seed(SEED)
-if torch.cuda.is_available():
-    torch.cuda.manual_seed(SEED)
 torch.set_float32_matmul_precision("high")
 
 config = MPNNConfig()
@@ -391,111 +392,112 @@ if USE_V1_FEATURIZER:
         dset._init_cache()
     print(f"Switched to v1 atom featurizer (d_v={_d_v})")
 
-# ---- Model -----------------------------------------------------------------
+# ---- Model (build once to log param count; rebuild per seed inside loop) ---
 _n_extra = 0
 if EXTRA_FEATURES_FN is not None:
     _test_feat = EXTRA_FEATURES_FN("C")
     _n_extra = len(_test_feat) if _test_feat is not None else 0
-model = build_model(config, output_transform=output_transform, n_extra_features=_n_extra, n_atom_descriptors=_n_atom_desc, d_v=_d_v)
-
-n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-print(f"Trainable parameters: {n_params:,}")
+_sample_model = build_model(config, output_transform=output_transform, n_extra_features=_n_extra, n_atom_descriptors=_n_atom_desc, d_v=_d_v)
+n_params = sum(p.numel() for p in _sample_model.parameters() if p.requires_grad)
+print(f"Trainable parameters per model: {n_params:,}")
+del _sample_model
 
 # ---------------------------------------------------------------------------
-# Training
+# Training — ensemble loop
 # ---------------------------------------------------------------------------
-
-time_callback = TimeBudgetCallback(budget_seconds=TIME_BUDGET)
 
 # Pick accelerator automatically
 accelerator = "gpu" if torch.cuda.is_available() else "cpu"
 devices = 1
-
-# Estimate a generous upper bound on epochs; TimeBudgetCallback will stop early
-# Chemprop default is ~max_epochs=50 – we set a large ceiling and rely on time.
 MAX_EPOCHS = 500
 
-best_val_callback = BestValLossCallback()
-
-trainer = pl.Trainer(
-    accelerator=accelerator,
-    devices=devices,
-    max_epochs=MAX_EPOCHS,
-    logger=True,
-    enable_checkpointing=False,
-    enable_progress_bar=True,
-    callbacks=[time_callback, best_val_callback],
-)
-
-print(f"\nStarting training (accelerator={accelerator}, max wall-clock={TIME_BUDGET}s)…\n")
+trained_models = []
+total_training_time = 0.0
 t_train_start = time.time()
 
-trainer.fit(model, train_loader, val_loader)
+for _ens_idx, _ens_seed in enumerate(ENSEMBLE_SEEDS):
+    print(f"\n[Ensemble {_ens_idx+1}/{len(ENSEMBLE_SEEDS)}, SEED={_ens_seed}]")
+    torch.manual_seed(_ens_seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(_ens_seed)
 
-total_training_time = time_callback.total_training_seconds
-num_epochs = trainer.current_epoch + 1
+    _model = build_model(config, output_transform=output_transform, n_extra_features=_n_extra, n_atom_descriptors=_n_atom_desc, d_v=_d_v)
+
+    _time_cb = TimeBudgetCallback(budget_seconds=BUDGET_PER_MODEL)
+    _best_val_cb = BestValLossCallback()
+
+    _trainer = pl.Trainer(
+        accelerator=accelerator,
+        devices=devices,
+        max_epochs=MAX_EPOCHS,
+        logger=True,
+        enable_checkpointing=False,
+        enable_progress_bar=True,
+        callbacks=[_time_cb, _best_val_cb],
+    )
+
+    print(f"  Starting training (accelerator={accelerator}, budget={BUDGET_PER_MODEL}s)…")
+    _trainer.fit(_model, train_loader, val_loader)
+
+    total_training_time += _time_cb.total_training_seconds
+    _num_epochs = _trainer.current_epoch + 1
+    print(f"  Done: {_num_epochs} epochs, {_time_cb.total_training_seconds:.1f}s")
+    trained_models.append(_model)
 
 # ---------------------------------------------------------------------------
-# Stage 2: pEC50 output-row-only fine-tuning (20s)
+# Ensemble evaluation helpers
 # ---------------------------------------------------------------------------
-# BestValLossCallback restored best multi-task weights.
-# Only update the pEC50 row of the final output linear layer;
-# all other weights (MP, agg, FFN hidden, other output rows) stay frozen.
-FINE_TUNE2_SECS = 20
-print(f"\n[Stage 2] pEC50 output-row fine-tune for {FINE_TUNE2_SECS}s…")
-model.train()
-_pec50_idx = TARGET_COLS.index("pEC50")
-# Identify the final output weight/bias in the predictor FFN
-_out_w = model.predictor.ffn[-1][-1].weight  # [n_tasks, hidden_dim]
-_out_b = model.predictor.ffn[-1][-1].bias    # [n_tasks]
-# Freeze ALL parameters, then re-enable only output layer
-for param in model.parameters():
-    param.requires_grad_(False)
-_out_w.requires_grad_(True)
-_out_b.requires_grad_(True)
 
-_ft_opt = torch.optim.Adam([_out_w, _out_b], lr=5e-4)
-_ft_start = time.time()
-_ft_criterion = torch.nn.MSELoss()
-device = next(model.parameters()).device
-while time.time() - _ft_start < FINE_TUNE2_SECS:
-    for batch in train_loader:
-        if time.time() - _ft_start >= FINE_TUNE2_SECS:
-            break
-        bmg, V_d, X_d, targets, *_ = batch
-        if device.type == "cuda":
-            bmg = bmg.to(device)
-        preds = model(bmg, V_d, X_d)
-        gt = targets[:, _pec50_idx]
-        pr = preds[:, _pec50_idx]
-        mask = gt.isfinite()
+def _ensemble_preds(models, loader):
+    """Return averaged unscaled predictions [N, T] from all ensemble models."""
+    device = next(models[0].parameters()).device
+    per_model = []
+    for m in models:
+        m.eval()
+        batches = []
+        with torch.no_grad():
+            for batch in loader:
+                bmg, V_d, X_d, *_ = batch
+                if device.type == "cuda":
+                    bmg = bmg.to(device)
+                batches.append(m(bmg, V_d, X_d).cpu().numpy())
+        per_model.append(np.concatenate(batches, axis=0))
+    return np.mean(per_model, axis=0)
+
+
+def ensemble_evaluate(models, loader, target_cols):
+    """Evaluate an ensemble of models; replicates evaluate_regression metric."""
+    preds = _ensemble_preds(models, loader)
+    all_tgt = []
+    for batch in loader:
+        tgt = batch[3] if isinstance(batch, (list, tuple)) else batch.Y
+        all_tgt.append(tgt.numpy())
+    targets = np.concatenate(all_tgt, axis=0)
+
+    per_task = {}
+    rmses = []
+    for i, col in enumerate(target_cols):
+        p = preds[:, i]
+        t = targets[:, i]
+        mask = np.isfinite(t) & np.isfinite(p)
         if mask.sum() == 0:
-            continue
-        loss = _ft_criterion(pr[mask], gt[mask])
-        _ft_opt.zero_grad()
-        loss.backward()
-        # Zero out non-pEC50 row gradients
-        if _out_w.grad is not None:
-            _out_w.grad[[i for i in range(_out_w.shape[0]) if i != _pec50_idx]] = 0
-        if _out_b.grad is not None:
-            _out_b.grad[[i for i in range(_out_b.shape[0]) if i != _pec50_idx]] = 0
-        _ft_opt.step()
+            per_task[col] = float("nan")
+        else:
+            rmse = float(np.sqrt(np.mean((p[mask] - t[mask]) ** 2)))
+            per_task[col] = rmse
+            rmses.append(rmse)
+    return {"mean_rmse": float(np.mean(rmses)) if rmses else float("nan"), "per_task": per_task}
 
-# Re-enable all parameters for evaluation
-for param in model.parameters():
-    param.requires_grad_(True)
-print(f"  Stage 2 done in {time.time()-_ft_start:.1f}s")
 
 # ---------------------------------------------------------------------------
 # Evaluation
 # ---------------------------------------------------------------------------
 
-model.eval()
 print("\nRunning final evaluation on validation set…")
-val_results  = evaluate_regression(model, val_loader,  target_cols=TARGET_COLS, batch_size=BATCH_SIZE)
+val_results  = ensemble_evaluate(trained_models, val_loader,  TARGET_COLS)
 
 print("Running final evaluation on test set…")
-test_results = evaluate_regression(model, test_loader, target_cols=TARGET_COLS, batch_size=BATCH_SIZE)
+test_results = ensemble_evaluate(trained_models, test_loader, TARGET_COLS)
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -524,7 +526,9 @@ print(f"\ntraining_seconds:   {total_training_time:.1f}")
 print(f"total_seconds:      {t_end - t_start:.1f}")
 print(f"startup_seconds:    {startup_time:.1f}")
 print(f"peak_vram_mb:       {peak_vram_mb:.1f}")
-print(f"num_epochs:         {num_epochs}")
+print(f"ensemble_members:   {len(trained_models)}")
+print(f"ensemble_seeds:     {ENSEMBLE_SEEDS}")
+print(f"budget_per_model:   {BUDGET_PER_MODEL}s")
 print(f"train_molecules:    {len(train_dset):,}")
 print(f"val_molecules:      {len(val_dset):,}")
 print(f"test_molecules:     {len(test_dset):,}")
@@ -553,7 +557,8 @@ with open('run.log', 'w') as f:
     f.write(f"total_seconds:      {t_end - t_start:.1f}\n")
     f.write(f"startup_seconds:    {startup_time:.1f}\n")
     f.write(f"peak_vram_mb:       {peak_vram_mb:.1f}\n")
-    f.write(f"num_epochs:         {num_epochs}\n")
+    f.write(f"ensemble_members:   {len(trained_models)}\n")
+    f.write(f"ensemble_seeds:     {ENSEMBLE_SEEDS}\n")
     f.write(f"train_molecules:    {len(train_dset):,}\n")
     f.write(f"val_molecules:      {len(val_dset):,}\n")
     f.write(f"test_molecules:     {len(test_dset):,}\n")
