@@ -25,25 +25,6 @@ import lightning.pytorch as pl
 from lightning.pytorch.callbacks import Callback, StochasticWeightAveraging
 
 from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluate_regression
-
-
-# ---------------------------------------------------------------------------
-# SGDRMixin — CosineAnnealingWarmRestarts: LR resets help escape local minima
-# T_0=30 cycles, T_mult=2 → restarts at epoch 30, 90, 210 (fits ~200 epoch budget)
-# ---------------------------------------------------------------------------
-
-class SGDRMixin:
-    """Mixin: replace Noam with CosineAnnealingWarmRestarts (SGDR)."""
-
-    def configure_optimizers(self):
-        opt = torch.optim.Adam(self.parameters(), lr=MAX_LR)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            opt, T_0=30, T_mult=2, eta_min=FINAL_LR
-        )
-        return {
-            "optimizer": opt,
-            "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"},
-        }
 # ---------------------------------------------------------------------------
 # Target columns — pick any subset of AVAILABLE_TARGET_COLS
 # ---------------------------------------------------------------------------
@@ -191,12 +172,10 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         AtomMessagePassing,
         BondMessagePassing,
         NormAggregation,
+        SumAggregation,
         RegressionFFN,
         metrics as cp_metrics,
     )
-
-    class OneCycleMPNNModel(SGDRMixin, MPNN):
-        pass
 
     mp = AtomMessagePassing(
         depth=config.depth,
@@ -205,6 +184,8 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         dropout=config.dropout,
         d_vd=n_atom_descriptors if n_atom_descriptors > 0 else None,
     )
+
+    agg = SumAggregation()  # raw sum preserves molecular-size information (never tried)
 
     agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
 
@@ -223,7 +204,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    model = OneCycleMPNNModel(
+    model = MPNN(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
