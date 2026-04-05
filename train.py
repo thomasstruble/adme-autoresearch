@@ -177,7 +177,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         dropout=config.dropout,
     )
 
-    agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
+    agg = NormAggregation(norm=35.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
@@ -191,19 +191,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    class AdamWMPNN(MPNN):
-        def configure_optimizers(self):
-            result = super().configure_optimizers()
-            import torch.optim as optim
-            old_opt = result["optimizer"]
-            new_opt = optim.AdamW(self.parameters(), lr=old_opt.defaults["lr"], weight_decay=1e-4)
-            # Re-attach scheduler to new optimizer
-            scheduler = result["lr_scheduler"]
-            scheduler["scheduler"].optimizer = new_opt
-            result["optimizer"] = new_opt
-            return result
-
-    model = AdamWMPNN(
+    model = MPNN(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
