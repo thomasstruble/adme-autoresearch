@@ -34,7 +34,6 @@ TARGET_COLS = [
     "pEC50",
     "Emax.vs.pos.ctrl_estimate (dimensionless)",
     "Emax.vs.pos.ctrl_ci.upper (dimensionless)",
-    "Emax_estimate (log2FC vs. baseline)",
 ]
 # fmt: on
 
@@ -186,6 +185,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         hidden_dim=config.ffn_hidden_size,
         n_layers=config.ffn_num_layers,
         dropout=config.dropout,
+        task_weights=torch.tensor([1.0, 2.0, 1.0]),
     )
     if output_transform is not None:
         ffn_kwargs["output_transform"] = output_transform
