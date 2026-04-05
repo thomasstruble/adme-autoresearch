@@ -32,8 +32,8 @@ from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluat
 # fmt: off
 TARGET_COLS = [
     "pEC50",
-    "pEC50_ci.lower (-log10(molarity))",
-    "pEC50_ci.upper (-log10(molarity))",
+    "Emax.vs.pos.ctrl_estimate (dimensionless)",
+    "Emax.vs.pos.ctrl_ci.upper (dimensionless)",
 ]
 # fmt: on
 
@@ -80,7 +80,7 @@ BATCH_SIZE = 64         # molecules per mini-batch
 WARMUP_EPOCHS = 2       # epochs of LR warm-up
 INIT_LR = 1e-4          # starting learning rate
 MAX_LR = 8e-4           # peak learning rate
-FINAL_LR = 1e-4         # final learning rate after decay
+FINAL_LR = 5e-5         # final learning rate after decay
 
 # Misc
 BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
