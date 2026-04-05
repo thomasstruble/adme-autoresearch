@@ -71,7 +71,7 @@ HIDDEN_SIZE = 300       # hidden dimension in message passing layers
 DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
-FFN_NUM_LAYERS = 3      # number of FFN layers after aggregation
+FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
 FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
@@ -284,7 +284,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         d_vd=n_atom_descriptors if n_atom_descriptors > 0 else None,
     )
 
-    agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
+    agg = NormAggregation(norm=20.0)  # drug-like molecules; tuning from default 25
 
     # mp.output_dim = hidden_size + n_atom_descriptors when d_vd is set
     ffn_input_dim = mp.output_dim + n_extra_features
