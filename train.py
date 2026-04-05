@@ -210,6 +210,9 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         metrics as cp_metrics,
     )
 
+    class TwoStageModel(TwoStageMixin, MPNN):
+        pass
+
     mp = AtomMessagePassing(
         depth=config.depth,
         d_v=d_v,
@@ -235,7 +238,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    model = MPNN(
+    model = TwoStageModel(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
