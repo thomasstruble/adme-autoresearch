@@ -84,11 +84,11 @@ FINAL_LR = 1e-4         # final learning rate after decay
 # Misc
 BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
 NUM_WORKERS = 15         # dataloader workers (>0 is faster on Linux)
-SEED = 42
+SEED = 0
 
 # Ensemble: train multiple models with different seeds and average predictions
-ENSEMBLE_SEEDS = [42, 0]      # seeds for ensemble members
-BUDGET_PER_MODEL = 140        # wall-clock seconds allocated per ensemble member
+ENSEMBLE_SEEDS = [SEED]           # single model (set to [42, 0] etc. for ensemble)
+BUDGET_PER_MODEL = TIME_BUDGET    # wall-clock seconds per ensemble member
 
 # ---------------------------------------------------------------------------
 # Model config (read-only after build — logged at startup)
