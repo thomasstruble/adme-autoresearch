@@ -57,6 +57,28 @@ TARGET_COLS = [
 EXTRA_FEATURES_FN = None
 
 # ---------------------------------------------------------------------------
+# Physchem featurizer for extra molecule-level features
+# ---------------------------------------------------------------------------
+from rdkit import Chem
+from rdkit.Chem import Descriptors
+
+
+def physchem_features(smiles: str):
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return None
+    return np.array([
+        Descriptors.MolWt(mol),
+        Descriptors.MolLogP(mol),
+        Descriptors.NumHDonors(mol),
+        Descriptors.NumHAcceptors(mol),
+        Descriptors.TPSA(mol),
+    ], dtype=np.float32)
+
+
+EXTRA_FEATURES_FN = physchem_features
+
+# ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
 # ---------------------------------------------------------------------------
 
@@ -67,7 +89,7 @@ DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
 FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
-FFN_HIDDEN_SIZE = 350   # hidden dimension in FFN
+FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
 BATCH_SIZE = 64         # molecules per mini-batch
