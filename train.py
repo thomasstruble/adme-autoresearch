@@ -170,15 +170,15 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         RegressionFFN,
         metrics as cp_metrics,
     )
-    from chemprop.nn.agg import MeanAggregation
 
     mp = AtomMessagePassing(
         depth=config.depth,
         d_h=config.hidden_size,
         dropout=config.dropout,
+        undirected=True,
     )
 
-    agg = MeanAggregation()
+    agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
