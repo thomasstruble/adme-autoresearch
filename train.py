@@ -34,6 +34,7 @@ TARGET_COLS = [
     "pEC50",
     "Emax.vs.pos.ctrl_estimate (dimensionless)",
     "Emax.vs.pos.ctrl_ci.upper (dimensionless)",
+    "Emax_std.error (log2FC vs. baseline)",
 ]
 # fmt: on
 
@@ -267,7 +268,7 @@ devices = 1
 
 # Estimate a generous upper bound on epochs; TimeBudgetCallback will stop early
 # Chemprop default is ~max_epochs=50 – we set a large ceiling and rely on time.
-MAX_EPOCHS = 200  # calibrated: ~174 epochs run in 5min budget, decay curve reaches ~final_lr
+MAX_EPOCHS = 500
 
 trainer = pl.Trainer(
     accelerator=accelerator,
