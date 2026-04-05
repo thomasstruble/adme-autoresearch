@@ -191,7 +191,19 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    model = MPNN(
+    class AdamWMPNN(MPNN):
+        def configure_optimizers(self):
+            result = super().configure_optimizers()
+            import torch.optim as optim
+            old_opt = result["optimizer"]
+            new_opt = optim.AdamW(self.parameters(), lr=old_opt.defaults["lr"], weight_decay=1e-4)
+            # Re-attach scheduler to new optimizer
+            scheduler = result["lr_scheduler"]
+            scheduler["scheduler"].optimizer = new_opt
+            result["optimizer"] = new_opt
+            return result
+
+    model = AdamWMPNN(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
@@ -202,20 +214,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         final_lr=config.final_lr,
         metrics=[cp_metrics.RMSE(), cp_metrics.MAE()],
     )
-
-    # Override optimizer to use AdamW
-    import torch.optim as optim
-    _orig_configure_optimizers = model.configure_optimizers
-    def _configure_optimizers_adamw(self=model):
-        result = _orig_configure_optimizers()
-        # Replace Adam with AdamW in the optimizers
-        opt = result["optimizer"]
-        new_opt = optim.AdamW(model.parameters(), lr=opt.defaults["lr"], weight_decay=1e-4)
-        result["optimizer"] = new_opt
-        return result
-    import types
-    model.configure_optimizers = types.MethodType(lambda self: _configure_optimizers_adamw(), model)
-
     return model
 
 
