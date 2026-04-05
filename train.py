@@ -28,21 +28,30 @@ from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluat
 
 
 # ---------------------------------------------------------------------------
-# MABAtomMPWrapper — MABAtomMessagePassing with standard MPNN-compatible interface
-# Adds a final W_vo(x_v || m_v^T) → h output layer vs standard AtomMP
+# OneCycleMPNN — MPNN subclass using OneCycleLR (cosine) instead of Noam (exponential)
+# Stays at peak LR longer then smoothly decays — can find flatter minima
 # ---------------------------------------------------------------------------
 
-class MABAtomMPWrapper:
-    """Mixin: override output_dim and forward so MPNN can use MABAtomMessagePassing."""
+class OneCycleMPNN:
+    """Mixin: replace Noam exponential decay with OneCycleLR cosine annealing."""
 
-    @property
-    def output_dim(self):
-        return self.output_dims[0]
-
-    def forward(self, bmg, V_d=None):
-        H_v, _ = super().forward(bmg, V_d)
-        return H_v
-
+    def configure_optimizers(self):
+        opt = torch.optim.Adam(self.parameters(), lr=INIT_LR)
+        steps_per_epoch = self.trainer.num_training_batches
+        total_steps = MAX_EPOCHS * steps_per_epoch
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            opt,
+            max_lr=MAX_LR,
+            total_steps=total_steps,
+            pct_start=WARMUP_EPOCHS / MAX_EPOCHS,
+            anneal_strategy="cos",
+            div_factor=MAX_LR / INIT_LR,          # start_lr = max_lr / div_factor = INIT_LR
+            final_div_factor=INIT_LR / FINAL_LR,  # final_lr = init_lr / final_div_factor = FINAL_LR
+        )
+        return {
+            "optimizer": opt,
+            "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
+        }
 # ---------------------------------------------------------------------------
 # Target columns — pick any subset of AVAILABLE_TARGET_COLS
 # ---------------------------------------------------------------------------
@@ -188,18 +197,16 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
     from chemprop.models import MPNN
     from chemprop.nn import (
         AtomMessagePassing,
-        MABAtomMessagePassing,
         BondMessagePassing,
         NormAggregation,
         RegressionFFN,
         metrics as cp_metrics,
     )
 
-    # MABAtomMessagePassing subclass with MPNN-compatible interface
-    class WrappedMABAtomMP(MABAtomMPWrapper, MABAtomMessagePassing):
+    class OneCycleMPNNModel(OneCycleMPNN, MPNN):
         pass
 
-    mp = WrappedMABAtomMP(
+    mp = AtomMessagePassing(
         depth=config.depth,
         d_v=d_v,
         d_h=config.hidden_size,
@@ -224,7 +231,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    model = MPNN(
+    model = OneCycleMPNNModel(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
