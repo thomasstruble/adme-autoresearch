@@ -160,6 +160,40 @@ class BestValLossCallback(Callback):
             pl_module.load_state_dict(self._best_state)
             print(f"  [BestValLoss] Restored weights from best val_loss={self.best_val_loss:.6f}")
 
+
+class TopKAvgCallback(Callback):
+    """Averages weights from the K epochs with lowest val_loss at end of training.
+
+    Weight averaging over the best K checkpoints is a form of ensembling in
+    weight space that can reduce variance without additional compute at inference.
+    """
+
+    def __init__(self, k: int = 5):
+        self.k = k
+        self._snapshots: list[tuple[float, dict]] = []  # (val_loss, state_dict)
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        val_loss = float(trainer.callback_metrics.get('val_loss', float('inf')))
+        state = {key: val.clone() for key, val in pl_module.state_dict().items()}
+        self._snapshots.append((val_loss, state))
+        # Keep only the K best (lowest val_loss)
+        self._snapshots.sort(key=lambda x: x[0])
+        if len(self._snapshots) > self.k:
+            self._snapshots.pop()  # remove worst
+
+    def on_fit_end(self, trainer, pl_module):
+        if not self._snapshots:
+            return
+        # Average weights from top-K snapshots
+        avg_state = {}
+        for key in self._snapshots[0][1]:
+            tensors = [snap[1][key].float() for snap in self._snapshots]
+            avg_state[key] = torch.stack(tensors).mean(0).to(self._snapshots[0][1][key].dtype)
+        pl_module.load_state_dict(avg_state)
+        best_losses = [f"{s[0]:.4f}" for s in self._snapshots]
+        print(f"  [TopKAvg] Averaged weights from K={len(self._snapshots)} best epochs: {best_losses}")
+
+
 FINE_TUNE_SECS = 45  # last N seconds of training devoted to pEC50-only fine-tuning
 
 
@@ -210,9 +244,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         metrics as cp_metrics,
     )
 
-    class TwoStageModel(TwoStageMixin, MPNN):
-        pass
-
     mp = AtomMessagePassing(
         depth=config.depth,
         d_v=d_v,
@@ -238,7 +269,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    model = TwoStageModel(
+    model = MPNN(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
@@ -356,7 +387,7 @@ devices = 1
 # Chemprop default is ~max_epochs=50 – we set a large ceiling and rely on time.
 MAX_EPOCHS = 500
 
-best_val_callback = BestValLossCallback()
+best_val_callback = TopKAvgCallback(k=5)
 
 trainer = pl.Trainer(
     accelerator=accelerator,
