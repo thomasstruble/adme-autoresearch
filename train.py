@@ -55,6 +55,21 @@ TARGET_COLS = [
 #
 EXTRA_FEATURES_FN = None
 
+# ---- V1RDKit2DNormalizedFeaturizer as extra molecular features (200-dim, 0-1 range)
+from chemprop.featurizers import V1RDKit2DNormalizedFeaturizer as _V1RDKit2DNorm
+_rdkit2d_feat = _V1RDKit2DNorm()
+
+def rdkit2d_normalized(smiles: str):
+    """200-dim normalized RDKit 2D descriptors appended to molecular fingerprint."""
+    from rdkit import Chem
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return None
+    result = _rdkit2d_feat(mol).astype(np.float32)
+    return result
+
+EXTRA_FEATURES_FN = rdkit2d_normalized
+
 # ---------------------------------------------------------------------------
 # Gasteiger charges as per-atom vertex descriptors (V_d)
 # ---------------------------------------------------------------------------
@@ -278,7 +293,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         d_h=config.hidden_size,
         dropout=config.dropout,
         d_vd=n_atom_descriptors if n_atom_descriptors > 0 else None,
-        activation='elu',  # ELU in message passing (never tried; FFN keeps default ReLU)
     )
 
     agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
