@@ -21,10 +21,27 @@ from dataclasses import dataclass, asdict
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks import Callback, StochasticWeightAveraging
 
+from chemprop.nn.metrics import ChempropMetric
+
 from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluate_regression
+
+
+# ---------------------------------------------------------------------------
+# Custom Huber (smooth L1) criterion for training
+# ---------------------------------------------------------------------------
+
+class HuberCriterion(ChempropMetric):
+    """Huber loss: MSE for |error| < delta, MAE-like for large errors."""
+    def __init__(self, delta: float = 1.0, task_weights=1.0):
+        super().__init__(task_weights=task_weights)
+        self.delta = delta
+
+    def _calc_unreduced_loss(self, preds, targets, mask, weights, lt_mask, gt_mask):
+        return F.huber_loss(preds, targets, reduction="none", delta=self.delta)
 
 # ---------------------------------------------------------------------------
 # Target columns — pick any subset of AVAILABLE_TARGET_COLS
@@ -196,7 +213,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         hidden_dim=config.ffn_hidden_size,
         n_layers=config.ffn_num_layers,
         dropout=config.dropout,
-        activation=torch.nn.SiLU(),
+        criterion=HuberCriterion(delta=1.0),
     )
     if output_transform is not None:
         ffn_kwargs["output_transform"] = output_transform
