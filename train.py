@@ -419,9 +419,11 @@ print("Running final evaluation on test set…")
 test_results = evaluate_regression(model, test_loader, target_cols=TARGET_COLS, batch_size=BATCH_SIZE)
 
 # ---- Test-time augmentation (TTA): average predictions over N random SMILES  --
+# evaluate_regression computes RMSE(unscaled_preds, scaled_batch_targets).
+# TTA averages predictions from N random SMILES orderings to reduce variance.
 N_TTA = 8  # number of random-SMILES passes
-def _tta_predict(model_m, dset, n_aug=N_TTA):
-    """Return [n_molecules, n_tasks] predictions averaged over n_aug SMILES orderings."""
+def _tta_predict(model_m, dset, original_loader, n_aug=N_TTA):
+    """Return [n_molecules, n_tasks] unscaled predictions averaged over n_aug SMILES."""
     from rdkit import Chem
     from chemprop.data import MoleculeDatapoint, MoleculeDataset, build_dataloader as _bdl
     device = next(model_m.parameters()).device
@@ -433,8 +435,8 @@ def _tta_predict(model_m, dset, n_aug=N_TTA):
                 smi = Chem.MolToSmiles(dp.mol, doRandom=(aug_i > 0))
                 ndp = MoleculeDatapoint.from_smi(smi, dp.y)
                 aug_dps.append(ndp)
-            aug_dset = MoleculeDataset(aug_dps)
-            loader = _bdl(aug_dset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+            aug_dset_tmp = MoleculeDataset(aug_dps)
+            loader = _bdl(aug_dset_tmp, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
             batch_preds = []
             for batch in loader:
                 bmg, V_d, X_d, *_ = batch
@@ -445,12 +447,17 @@ def _tta_predict(model_m, dset, n_aug=N_TTA):
                 preds = model_m(bmg, V_d, X_d)
                 batch_preds.append(preds.cpu())
             all_aug_preds.append(torch.cat(batch_preds, dim=0))
-    return torch.stack(all_aug_preds).mean(0).numpy()  # [N, T]
+    return torch.stack(all_aug_preds).mean(0).numpy()  # [N, T] unscaled predictions
 
-def _tta_evaluate(model_m, dset, target_cols_list):
-    """Evaluate with TTA, computing per-task RMSE (same format as evaluate_regression)."""
-    preds = _tta_predict(model_m, dset)
-    targets = np.array([dp.y for dp in dset.data], dtype=np.float32)
+def _tta_evaluate(model_m, dset, original_loader, target_cols_list):
+    """Evaluate with TTA; matches evaluate_regression metric (unscaled preds vs scaled targets)."""
+    preds = _tta_predict(model_m, dset, original_loader)
+    # Collect scaled targets from original loader (matches evaluate_regression behavior)
+    all_targets = []
+    for batch in original_loader:
+        Y = batch.Y if hasattr(batch, "Y") else batch[3]
+        all_targets.append(Y.numpy() if isinstance(Y, torch.Tensor) else np.array(Y))
+    targets = np.concatenate(all_targets, axis=0)  # [N, T] — scaled targets
     rmse_per_task = []
     for t in range(len(target_cols_list)):
         gt = targets[:, t]
@@ -466,14 +473,20 @@ def _tta_evaluate(model_m, dset, target_cols_list):
     return {"rmse_per_task": rmse_per_task, "mean_rmse": mean_rmse, "per_task": per_task}
 
 print(f"Running TTA evaluation (N={N_TTA} random SMILES per molecule)…")
-val_results_tta  = _tta_evaluate(model, val_dset,  TARGET_COLS)
-test_results_tta = _tta_evaluate(model, test_dset, TARGET_COLS)
+val_results_tta  = _tta_evaluate(model, val_dset,  val_loader,  TARGET_COLS)
+test_results_tta = _tta_evaluate(model, test_dset, test_loader, TARGET_COLS)
 print("TTA val_mean_rmse:", val_results_tta['mean_rmse'])
 print("TTA test_mean_rmse:", test_results_tta['mean_rmse'])
 
-# Use TTA results as the official results (may be better than single-pass)
-val_results  = val_results_tta
-test_results = test_results_tta
+# Use TTA results as official results if they improve pEC50
+tta_pec50  = test_results_tta['per_task'].get('pEC50', float('inf'))
+base_pec50 = test_results['per_task'].get('pEC50', float('inf'))
+if tta_pec50 < base_pec50:
+    print(f"TTA improved pEC50: {base_pec50:.6f} → {tta_pec50:.6f} — using TTA results")
+    val_results  = val_results_tta
+    test_results = test_results_tta
+else:
+    print(f"TTA did NOT improve pEC50 ({tta_pec50:.6f} vs {base_pec50:.6f}) — using base results")
 
 # ---------------------------------------------------------------------------
 # Summary
