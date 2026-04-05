@@ -60,6 +60,7 @@ EXTRA_FEATURES_FN = None
 # Gasteiger charges as per-atom vertex descriptors (V_d)
 # ---------------------------------------------------------------------------
 USE_GASTEIGER_VD = False  # set to True to add Gasteiger charges as V_d
+USE_V1_FEATURIZER = True  # use chemprop v1 atom featurizer (133-dim vs default 72-dim)
 
 # ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
@@ -165,7 +166,7 @@ class BestValLossCallback(Callback):
 # Build model
 # ---------------------------------------------------------------------------
 
-def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int = 0, n_atom_descriptors: int = 0):
+def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int = 0, n_atom_descriptors: int = 0, d_v: int = 72):
     """Construct a chemprop MPNN for multi-task regression."""
     from chemprop.models import MPNN
     from chemprop.nn import (
@@ -178,6 +179,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 
     mp = AtomMessagePassing(
         depth=config.depth,
+        d_v=d_v,
         d_h=config.hidden_size,
         dropout=config.dropout,
         d_vd=n_atom_descriptors if n_atom_descriptors > 0 else None,
@@ -282,12 +284,24 @@ if USE_GASTEIGER_VD:
     _n_atom_desc = 1
     print("Added Gasteiger charges as 1-dim V_d per atom")
 
+# ---- V1 atom featurizer (133-dim) ------------------------------------------
+_d_v = 72  # default atom feature dimension
+if USE_V1_FEATURIZER:
+    from chemprop.featurizers.atom import MultiHotAtomFeaturizer
+    from chemprop.featurizers import SimpleMoleculeMolGraphFeaturizer as _SMF
+    _v1_feat = _SMF(atom_featurizer=MultiHotAtomFeaturizer.v1())
+    _d_v = _v1_feat.atom_fdim
+    for dset in [train_dset, val_dset, test_dset]:
+        dset.featurizer = _v1_feat
+        dset._init_cache()
+    print(f"Switched to v1 atom featurizer (d_v={_d_v})")
+
 # ---- Model -----------------------------------------------------------------
 _n_extra = 0
 if EXTRA_FEATURES_FN is not None:
     _test_feat = EXTRA_FEATURES_FN("C")
     _n_extra = len(_test_feat) if _test_feat is not None else 0
-model = build_model(config, output_transform=output_transform, n_extra_features=_n_extra, n_atom_descriptors=_n_atom_desc)
+model = build_model(config, output_transform=output_transform, n_extra_features=_n_extra, n_atom_descriptors=_n_atom_desc, d_v=_d_v)
 
 n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print(f"Trainable parameters: {n_params:,}")
@@ -306,9 +320,6 @@ devices = 1
 # Chemprop default is ~max_epochs=50 – we set a large ceiling and rely on time.
 MAX_EPOCHS = 500
 
-from lightning.pytorch.callbacks import StochasticWeightAveraging
-swa_callback = StochasticWeightAveraging(swa_lrs=1e-4, swa_epoch_start=0.75)
-
 trainer = pl.Trainer(
     accelerator=accelerator,
     devices=devices,
@@ -316,7 +327,7 @@ trainer = pl.Trainer(
     logger=True,
     enable_checkpointing=False,
     enable_progress_bar=True,
-    callbacks=[time_callback, swa_callback],
+    callbacks=[time_callback],
 )
 
 print(f"\nStarting training (accelerator={accelerator}, max wall-clock={TIME_BUDGET}s)…\n")
