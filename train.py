@@ -37,8 +37,8 @@ class OneCycleMPNN:
 
     def configure_optimizers(self):
         opt = torch.optim.Adam(self.parameters(), lr=INIT_LR)
-        steps_per_epoch = self.trainer.num_training_batches
-        total_steps = MAX_EPOCHS * steps_per_epoch
+        # estimated_stepping_batches forces dataloader load and returns finite total steps
+        total_steps = int(self.trainer.estimated_stepping_batches)
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             opt,
             max_lr=MAX_LR,
