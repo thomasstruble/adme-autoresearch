@@ -28,29 +28,21 @@ from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluat
 
 
 # ---------------------------------------------------------------------------
-# OneCycleMPNN — MPNN subclass using OneCycleLR (cosine) instead of Noam (exponential)
-# Stays at peak LR longer then smoothly decays — can find flatter minima
+# SGDRMixin — CosineAnnealingWarmRestarts: LR resets help escape local minima
+# T_0=30 cycles, T_mult=2 → restarts at epoch 30, 90, 210 (fits ~200 epoch budget)
 # ---------------------------------------------------------------------------
 
-class OneCycleMPNN:
-    """Mixin: replace Noam exponential decay with OneCycleLR cosine annealing."""
+class SGDRMixin:
+    """Mixin: replace Noam with CosineAnnealingWarmRestarts (SGDR)."""
 
     def configure_optimizers(self):
-        opt = torch.optim.Adam(self.parameters(), lr=INIT_LR)
-        # estimated_stepping_batches forces dataloader load and returns finite total steps
-        total_steps = int(self.trainer.estimated_stepping_batches)
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            opt,
-            max_lr=MAX_LR,
-            total_steps=total_steps,
-            pct_start=WARMUP_EPOCHS / MAX_EPOCHS,
-            anneal_strategy="cos",
-            div_factor=MAX_LR / INIT_LR,          # start_lr = max_lr / div_factor = INIT_LR
-            final_div_factor=INIT_LR / FINAL_LR,  # final_lr = init_lr / final_div_factor = FINAL_LR
+        opt = torch.optim.Adam(self.parameters(), lr=MAX_LR)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            opt, T_0=30, T_mult=2, eta_min=FINAL_LR
         )
         return {
             "optimizer": opt,
-            "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
+            "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"},
         }
 # ---------------------------------------------------------------------------
 # Target columns — pick any subset of AVAILABLE_TARGET_COLS
@@ -203,7 +195,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         metrics as cp_metrics,
     )
 
-    class OneCycleMPNNModel(OneCycleMPNN, MPNN):
+    class OneCycleMPNNModel(SGDRMixin, MPNN):
         pass
 
     mp = AtomMessagePassing(
