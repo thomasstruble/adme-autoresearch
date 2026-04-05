@@ -62,7 +62,7 @@ EXTRA_FEATURES_FN = None
 
 # Message passing
 DEPTH = 3               # number of bond message-passing steps
-HIDDEN_SIZE = 280       # hidden dimension in message passing layers
+HIDDEN_SIZE = 300       # hidden dimension in message passing layers
 DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
@@ -185,6 +185,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         hidden_dim=config.ffn_hidden_size,
         n_layers=config.ffn_num_layers,
         dropout=config.dropout,
+        activation="elu",
     )
     if output_transform is not None:
         ffn_kwargs["output_transform"] = output_transform
