@@ -62,7 +62,7 @@ EXTRA_FEATURES_FN = None
 
 # Message passing
 DEPTH = 3               # number of bond message-passing steps
-HIDDEN_SIZE = 400       # hidden dimension in message passing layers
+HIDDEN_SIZE = 450       # hidden dimension in message passing layers
 DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
