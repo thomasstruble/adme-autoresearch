@@ -71,8 +71,8 @@ FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
 BATCH_SIZE = 64         # molecules per mini-batch
-WARMUP_EPOCHS = 1       # epochs of LR warm-up
-INIT_LR = 1e-4          # starting learning rate
+WARMUP_EPOCHS = 2       # epochs of LR warm-up
+INIT_LR = 2e-4          # starting learning rate
 MAX_LR = 8e-4           # peak learning rate
 FINAL_LR = 1e-4         # final learning rate after decay
 
