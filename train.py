@@ -72,7 +72,7 @@ FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
 BATCH_SIZE = 64         # molecules per mini-batch
 WARMUP_EPOCHS = 2       # epochs of LR warm-up
-INIT_LR = 1e-4          # starting learning rate
+INIT_LR = 1.5e-4        # starting learning rate
 MAX_LR = 8e-4           # peak learning rate
 FINAL_LR = 1e-4         # final learning rate after decay
 
@@ -230,32 +230,6 @@ test_loader  = make_dataloader("test",       target_cols=TARGET_COLS, batch_size
 train_dset = train_loader.dataset
 val_dset   = val_loader.dataset
 test_dset  = test_loader.dataset
-
-# ---- SMILES augmentation: add 1 randomized SMILES per train molecule --------
-from chemprop.data import MoleculeDatapoint, MoleculeDataset
-from rdkit.Chem import MolToSmiles
-import random as _rnd
-
-_rnd.seed(SEED)
-_orig_dps = list(train_dset.data)
-_aug_dps = []
-for dp in _orig_dps:
-    if dp.mol is None:
-        continue
-    try:
-        aug_smi = MolToSmiles(dp.mol, doRandom=True)
-        aug_dp = MoleculeDatapoint.from_smi(aug_smi, dp.y.copy())
-        _aug_dps.append(aug_dp)
-    except Exception:
-        pass
-# Rebuild dataset with original + augmented datapoints (resets cached _Y)
-_combined = MoleculeDataset(_orig_dps + _aug_dps)
-print(f"SMILES augmentation: {len(_orig_dps):,} original + {len(_aug_dps):,} augmented = {len(_combined):,} total")
-
-# Rebuild train_loader with augmented dataset (must be BEFORE normalize_targets)
-from chemprop.data import build_dataloader as _build_dl
-train_loader = _build_dl(_combined, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, shuffle=True)
-train_dset = train_loader.dataset
 
 # ---- Target scaling (fit on train, apply to val + test; inverse baked into model) --
 from chemprop.nn.transforms import UnscaleTransform
