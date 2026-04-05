@@ -55,21 +55,6 @@ TARGET_COLS = [
 #
 EXTRA_FEATURES_FN = None
 
-# ---- V1RDKit2DNormalizedFeaturizer as extra molecular features (200-dim, 0-1 range)
-from chemprop.featurizers import V1RDKit2DNormalizedFeaturizer as _V1RDKit2DNorm
-_rdkit2d_feat = _V1RDKit2DNorm()
-
-def rdkit2d_normalized(smiles: str):
-    """200-dim normalized RDKit 2D descriptors appended to molecular fingerprint."""
-    from rdkit import Chem
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        return None
-    result = _rdkit2d_feat(mol).astype(np.float32)
-    return result
-
-EXTRA_FEATURES_FN = rdkit2d_normalized
-
 # ---------------------------------------------------------------------------
 # Gasteiger charges as per-atom vertex descriptors (V_d)
 # ---------------------------------------------------------------------------
@@ -87,7 +72,7 @@ DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
 FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
-FFN_HIDDEN_SIZE = 400   # hidden dimension in FFN — larger to handle 500-dim input
+FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
 BATCH_SIZE = 64         # molecules per mini-batch
@@ -449,6 +434,49 @@ trainer.fit(model, train_loader, val_loader)
 
 total_training_time = time_callback.total_training_seconds
 num_epochs = trainer.current_epoch + 1
+
+# ---------------------------------------------------------------------------
+# Stage 2: FFN-only pEC50 fine-tuning (20s, frozen message passing + agg)
+# ---------------------------------------------------------------------------
+# BestValLossCallback already restored the best multi-task weights.
+# Now freeze MP+agg and fine-tune only the FFN with lower LR on pEC50 only.
+FINE_TUNE2_SECS = 20
+print(f"\n[Stage 2] FFN-only pEC50 fine-tune for {FINE_TUNE2_SECS}s…")
+model.train()
+for name, param in model.named_parameters():
+    if "message_passing" in name or "agg" in name:
+        param.requires_grad_(False)
+
+_ft_opt = torch.optim.Adam(
+    [p for p in model.parameters() if p.requires_grad], lr=1e-4
+)
+_pec50_idx = TARGET_COLS.index("pEC50")
+_ft_start = time.time()
+_ft_criterion = torch.nn.MSELoss()
+device = next(model.parameters()).device
+while time.time() - _ft_start < FINE_TUNE2_SECS:
+    for batch in train_loader:
+        if time.time() - _ft_start >= FINE_TUNE2_SECS:
+            break
+        bmg, V_d, X_d, targets, *_ = batch
+        if device.type == "cuda":
+            bmg = bmg.to(device)
+        preds = model(bmg, V_d, X_d)
+        # Compute MSE on pEC50 only, ignoring NaN targets
+        gt = targets[:, _pec50_idx]
+        pr = preds[:, _pec50_idx]
+        mask = gt.isfinite()
+        if mask.sum() == 0:
+            continue
+        loss = _ft_criterion(pr[mask], gt[mask])
+        _ft_opt.zero_grad()
+        loss.backward()
+        _ft_opt.step()
+
+# Re-enable all parameters
+for param in model.parameters():
+    param.requires_grad_(True)
+print(f"  Stage 2 done in {time.time()-_ft_start:.1f}s")
 
 # ---------------------------------------------------------------------------
 # Evaluation
