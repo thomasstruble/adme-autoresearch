@@ -57,6 +57,21 @@ TARGET_COLS = [
 EXTRA_FEATURES_FN = None
 
 # ---------------------------------------------------------------------------
+# Extra features: Morgan fingerprints (2048-bit, radius 2)
+# ---------------------------------------------------------------------------
+from rdkit import Chem
+from rdkit.Chem import rdMolDescriptors
+
+def morgan_fingerprint(smiles: str):
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return None
+    fp = rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=2048)
+    return np.array(fp, dtype=np.float32)
+
+EXTRA_FEATURES_FN = morgan_fingerprint
+
+# ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
 # ---------------------------------------------------------------------------
 
@@ -71,8 +86,8 @@ FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
 BATCH_SIZE = 64         # molecules per mini-batch
-WARMUP_EPOCHS = 0       # epochs of LR warm-up
-INIT_LR = 8e-4          # starting learning rate (= MAX_LR for pure decay)
+WARMUP_EPOCHS = 2       # epochs of LR warm-up
+INIT_LR = 1e-4          # starting learning rate
 MAX_LR = 8e-4           # peak learning rate
 FINAL_LR = 1e-4         # final learning rate after decay
 
