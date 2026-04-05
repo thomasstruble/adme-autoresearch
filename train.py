@@ -160,10 +160,44 @@ class BestValLossCallback(Callback):
             pl_module.load_state_dict(self._best_state)
             print(f"  [BestValLoss] Restored weights from best val_loss={self.best_val_loss:.6f}")
 
+FINE_TUNE_SECS = 45  # last N seconds of training devoted to pEC50-only fine-tuning
 
-# ---------------------------------------------------------------------------
-# Build model
-# ---------------------------------------------------------------------------
+
+class TwoStageMixin:
+    """Mixin: train multi-task for most of budget, then fine-tune pEC50-only.
+
+    For the last FINE_TUNE_SECS seconds, only the pEC50 loss (column 0) is
+    backpropagated. This lets the model specialize on the primary metric after
+    the auxiliary tasks have shaped the shared representation.
+    """
+
+    _ft_mode: bool = False
+    _ft_training_start: float = None
+
+    def on_train_start(self):
+        super().on_train_start()
+        self._ft_training_start = time.time()
+
+    def training_step(self, batch, batch_idx):
+        # Switch to fine-tune mode when approaching the time budget
+        if not self._ft_mode and self._ft_training_start is not None:
+            elapsed = time.time() - self._ft_training_start
+            if elapsed >= TIME_BUDGET - FINE_TUNE_SECS:
+                self._ft_mode = True
+                print(f"\n[Stage 2] pEC50-only fine-tuning starts at t={elapsed:.1f}s")
+
+        batch_size = self.get_batch_size(batch)
+        bmg, V_d, X_d, targets, weights, lt_mask, gt_mask = batch
+        preds = self(bmg, V_d, X_d)
+        mask = targets.isfinite()
+        if self._ft_mode:
+            mask[:, 1:] = False  # Only backprop pEC50 loss during fine-tuning
+        targets = targets.nan_to_num(nan=0.0)
+        l = self.criterion(preds, targets, mask, weights, lt_mask, gt_mask)
+        self.log("train_loss", self.criterion, batch_size=batch_size, prog_bar=True, on_epoch=True)
+        return l
+
+
 
 def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int = 0, n_atom_descriptors: int = 0, d_v: int = 72):
     """Construct a chemprop MPNN for multi-task regression."""
@@ -175,6 +209,9 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         RegressionFFN,
         metrics as cp_metrics,
     )
+
+    class TwoStageModel(TwoStageMixin, MPNN):
+        pass
 
     mp = AtomMessagePassing(
         depth=config.depth,
@@ -201,7 +238,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    model = MPNN(
+    model = TwoStageModel(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
@@ -254,22 +291,6 @@ print(
     f"Val molecules:   {len(val_dset):,} | "
     f"Test molecules:  {len(test_dset):,}"
 )
-
-# ---- CI-based sample weighting (inverse sqrt of CI width) ------------------
-# Narrow CI → precise pEC50 measurement → higher training weight
-_ci_loader = make_dataloader("train",
-    target_cols=["pEC50_ci.lower (-log10(molarity))", "pEC50_ci.upper (-log10(molarity))"],
-    batch_size=256, num_workers=0)
-_ci_dset = _ci_loader.dataset
-_ci_widths = np.array([dp.y[1] - dp.y[0] for dp in _ci_dset.data], dtype=np.float32)
-_ci_widths = np.clip(_ci_widths, 1e-4, None)  # guard against zero-width
-_mean_w = float(_ci_widths.mean())
-_weights = (_mean_w / _ci_widths) ** 0.5
-_weights = _weights / _weights.mean()  # normalize to mean=1
-for dp, w in zip(train_dset.data, _weights):
-    dp.weight = float(w)
-print(f"CI-based sample weights set: min={_weights.min():.3f} max={_weights.max():.3f} "
-      f"(narrow CI → more weight; {len(_weights)} molecules)")
 
 # ---- Gasteiger charges as per-atom vertex descriptors ----------------------
 _n_atom_desc = 0
