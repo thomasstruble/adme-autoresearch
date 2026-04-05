@@ -194,6 +194,34 @@ class TopKAvgCallback(Callback):
         print(f"  [TopKAvg] Averaged weights from K={len(self._snapshots)} best epochs: {best_losses}")
 
 
+class EMACallback(Callback):
+    """Exponential moving average (EMA) of model weights for smoother optimization.
+
+    Maintains a running EMA of parameters updated after each training batch.
+    At the end of training, loads EMA weights for evaluation — often more
+    stable than the final noisy SGD iterate.
+    """
+
+    def __init__(self, decay: float = 0.999):
+        self.decay = decay
+        self._ema_state: dict | None = None
+
+    def on_train_batch_end(self, trainer, pl_module, *args, **kwargs):
+        sd = pl_module.state_dict()
+        if self._ema_state is None:
+            self._ema_state = {k: v.clone() for k, v in sd.items()}
+        else:
+            for key in self._ema_state:
+                self._ema_state[key] = (
+                    self.decay * self._ema_state[key] + (1.0 - self.decay) * sd[key]
+                )
+
+    def on_fit_end(self, trainer, pl_module):
+        if self._ema_state is not None:
+            pl_module.load_state_dict(self._ema_state)
+            print(f"  [EMA] Loaded EMA weights (decay={self.decay})")
+
+
 FINE_TUNE_SECS = 45  # last N seconds of training devoted to pEC50-only fine-tuning
 
 
@@ -387,7 +415,7 @@ devices = 1
 # Chemprop default is ~max_epochs=50 – we set a large ceiling and rely on time.
 MAX_EPOCHS = 500
 
-best_val_callback = BestValLossCallback()
+best_val_callback = EMACallback(decay=0.999)
 
 trainer = pl.Trainer(
     accelerator=accelerator,
@@ -417,76 +445,6 @@ val_results  = evaluate_regression(model, val_loader,  target_cols=TARGET_COLS, 
 
 print("Running final evaluation on test set…")
 test_results = evaluate_regression(model, test_loader, target_cols=TARGET_COLS, batch_size=BATCH_SIZE)
-
-# ---- Test-time augmentation (TTA): average predictions over N random SMILES  --
-# evaluate_regression computes RMSE(unscaled_preds, scaled_batch_targets).
-# TTA averages predictions from N random SMILES orderings to reduce variance.
-N_TTA = 8  # number of random-SMILES passes
-def _tta_predict(model_m, dset, original_loader, n_aug=N_TTA):
-    """Return [n_molecules, n_tasks] unscaled predictions averaged over n_aug SMILES."""
-    from rdkit import Chem
-    from chemprop.data import MoleculeDatapoint, MoleculeDataset, build_dataloader as _bdl
-    device = next(model_m.parameters()).device
-    all_aug_preds = []
-    with torch.no_grad():
-        for aug_i in range(n_aug):
-            aug_dps = []
-            for dp in dset.data:
-                smi = Chem.MolToSmiles(dp.mol, doRandom=(aug_i > 0))
-                ndp = MoleculeDatapoint.from_smi(smi, dp.y)
-                aug_dps.append(ndp)
-            aug_dset_tmp = MoleculeDataset(aug_dps)
-            loader = _bdl(aug_dset_tmp, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
-            batch_preds = []
-            for batch in loader:
-                bmg, V_d, X_d, *_ = batch
-                if device.type == "cuda":
-                    bmg = bmg.to(device)
-                    V_d = V_d.to(device) if V_d is not None else None
-                    X_d = X_d.to(device) if X_d is not None else None
-                preds = model_m(bmg, V_d, X_d)
-                batch_preds.append(preds.cpu())
-            all_aug_preds.append(torch.cat(batch_preds, dim=0))
-    return torch.stack(all_aug_preds).mean(0).numpy()  # [N, T] unscaled predictions
-
-def _tta_evaluate(model_m, dset, original_loader, target_cols_list):
-    """Evaluate with TTA; matches evaluate_regression metric (unscaled preds vs scaled targets)."""
-    preds = _tta_predict(model_m, dset, original_loader)
-    # Collect scaled targets from original loader (matches evaluate_regression behavior)
-    all_targets = []
-    for batch in original_loader:
-        Y = batch.Y if hasattr(batch, "Y") else batch[3]
-        all_targets.append(Y.numpy() if isinstance(Y, torch.Tensor) else np.array(Y))
-    targets = np.concatenate(all_targets, axis=0)  # [N, T] — scaled targets
-    rmse_per_task = []
-    for t in range(len(target_cols_list)):
-        gt = targets[:, t]
-        pr = preds[:, t]
-        mask = ~np.isnan(gt)
-        if mask.sum() == 0:
-            rmse_per_task.append(float('nan'))
-        else:
-            rmse_per_task.append(float(np.sqrt(np.mean((gt[mask] - pr[mask]) ** 2))))
-    valid_rmses = [r for r in rmse_per_task if not math.isnan(r)]
-    mean_rmse = float(np.mean(valid_rmses)) if valid_rmses else float('nan')
-    per_task = {col: rmse_per_task[i] for i, col in enumerate(target_cols_list)}
-    return {"rmse_per_task": rmse_per_task, "mean_rmse": mean_rmse, "per_task": per_task}
-
-print(f"Running TTA evaluation (N={N_TTA} random SMILES per molecule)…")
-val_results_tta  = _tta_evaluate(model, val_dset,  val_loader,  TARGET_COLS)
-test_results_tta = _tta_evaluate(model, test_dset, test_loader, TARGET_COLS)
-print("TTA val_mean_rmse:", val_results_tta['mean_rmse'])
-print("TTA test_mean_rmse:", test_results_tta['mean_rmse'])
-
-# Use TTA results as official results if they improve pEC50
-tta_pec50  = test_results_tta['per_task'].get('pEC50', float('inf'))
-base_pec50 = test_results['per_task'].get('pEC50', float('inf'))
-if tta_pec50 < base_pec50:
-    print(f"TTA improved pEC50: {base_pec50:.6f} → {tta_pec50:.6f} — using TTA results")
-    val_results  = val_results_tta
-    test_results = test_results_tta
-else:
-    print(f"TTA did NOT improve pEC50 ({tta_pec50:.6f} vs {base_pec50:.6f}) — using base results")
 
 # ---------------------------------------------------------------------------
 # Summary
