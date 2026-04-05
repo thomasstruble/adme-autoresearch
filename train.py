@@ -57,21 +57,6 @@ TARGET_COLS = [
 EXTRA_FEATURES_FN = None
 
 # ---------------------------------------------------------------------------
-# Extra features: Morgan fingerprints (2048-bit, radius 2)
-# ---------------------------------------------------------------------------
-from rdkit import Chem
-from rdkit.Chem import rdMolDescriptors
-
-def morgan_fingerprint(smiles: str):
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        return None
-    fp = rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=2048)
-    return np.array(fp, dtype=np.float32)
-
-EXTRA_FEATURES_FN = morgan_fingerprint
-
-# ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
 # ---------------------------------------------------------------------------
 
@@ -282,7 +267,7 @@ devices = 1
 
 # Estimate a generous upper bound on epochs; TimeBudgetCallback will stop early
 # Chemprop default is ~max_epochs=50 – we set a large ceiling and rely on time.
-MAX_EPOCHS = 500
+MAX_EPOCHS = 750
 
 trainer = pl.Trainer(
     accelerator=accelerator,
