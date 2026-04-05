@@ -57,6 +57,11 @@ TARGET_COLS = [
 EXTRA_FEATURES_FN = None
 
 # ---------------------------------------------------------------------------
+# Gasteiger charges as per-atom vertex descriptors (V_d)
+# ---------------------------------------------------------------------------
+USE_GASTEIGER_VD = True   # set to True to add Gasteiger charges as V_d
+
+# ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
 # ---------------------------------------------------------------------------
 
@@ -160,7 +165,7 @@ class BestValLossCallback(Callback):
 # Build model
 # ---------------------------------------------------------------------------
 
-def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int = 0):
+def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int = 0, n_atom_descriptors: int = 0):
     """Construct a chemprop MPNN for multi-task regression."""
     from chemprop.models import MPNN
     from chemprop.nn import (
@@ -175,13 +180,17 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         depth=config.depth,
         d_h=config.hidden_size,
         dropout=config.dropout,
+        d_vd=n_atom_descriptors if n_atom_descriptors > 0 else None,
     )
 
     agg = NormAggregation(norm=25.0)  # drug-like molecules ~30-40 atoms, default 100 is too high
 
+    # mp.output_dim = hidden_size + n_atom_descriptors when d_vd is set
+    ffn_input_dim = mp.output_dim + n_extra_features
+
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
-        input_dim=config.hidden_size + n_extra_features,
+        input_dim=ffn_input_dim,
         hidden_dim=config.ffn_hidden_size,
         n_layers=config.ffn_num_layers,
         dropout=config.dropout,
@@ -245,12 +254,41 @@ print(
     f"Test molecules:  {len(test_dset):,}"
 )
 
+# ---- Gasteiger charges as per-atom vertex descriptors ----------------------
+_n_atom_desc = 0
+if USE_GASTEIGER_VD:
+    from rdkit.Chem import AllChem
+
+    def _add_gasteiger_vd(dset):
+        for dp in dset.data:
+            if dp.mol is None:
+                continue
+            mol = dp.mol
+            AllChem.ComputeGasteigerCharges(mol)
+            charges = np.array(
+                [[mol.GetAtomWithIdx(i).GetDoubleProp("_GasteigerCharge")]
+                 for i in range(mol.GetNumAtoms())],
+                dtype=np.float32,
+            )
+            # Replace NaN/inf with 0
+            charges = np.nan_to_num(charges, nan=0.0, posinf=0.0, neginf=0.0)
+            dp.V_d = charges
+        # Reset the cached V_ds property
+        if hasattr(dset, '_MolGraphDataset__V_ds'):
+            del dset.__dict__['_V_ds']
+
+    _add_gasteiger_vd(train_dset)
+    _add_gasteiger_vd(val_dset)
+    _add_gasteiger_vd(test_dset)
+    _n_atom_desc = 1
+    print("Added Gasteiger charges as 1-dim V_d per atom")
+
 # ---- Model -----------------------------------------------------------------
 _n_extra = 0
 if EXTRA_FEATURES_FN is not None:
     _test_feat = EXTRA_FEATURES_FN("C")
     _n_extra = len(_test_feat) if _test_feat is not None else 0
-model = build_model(config, output_transform=output_transform, n_extra_features=_n_extra)
+model = build_model(config, output_transform=output_transform, n_extra_features=_n_extra, n_atom_descriptors=_n_atom_desc)
 
 n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print(f"Trainable parameters: {n_params:,}")
@@ -267,7 +305,7 @@ devices = 1
 
 # Estimate a generous upper bound on epochs; TimeBudgetCallback will stop early
 # Chemprop default is ~max_epochs=50 – we set a large ceiling and rely on time.
-MAX_EPOCHS = 750
+MAX_EPOCHS = 500
 
 trainer = pl.Trainer(
     accelerator=accelerator,
