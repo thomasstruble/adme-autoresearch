@@ -273,9 +273,8 @@ if USE_GASTEIGER_VD:
             # Replace NaN/inf with 0
             charges = np.nan_to_num(charges, nan=0.0, posinf=0.0, neginf=0.0)
             dp.V_d = charges
-        # Reset the cached V_ds property
-        if hasattr(dset, '_MolGraphDataset__V_ds'):
-            del dset.__dict__['_V_ds']
+        # Update V_ds via setter to bypass the stale cached _V_ds property
+        dset.V_ds = [dp.V_d for dp in dset.data]
 
     _add_gasteiger_vd(train_dset)
     _add_gasteiger_vd(val_dset)
