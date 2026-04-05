@@ -63,7 +63,7 @@ EXTRA_FEATURES_FN = None
 # Message passing
 DEPTH = 3               # number of bond message-passing steps
 HIDDEN_SIZE = 300       # hidden dimension in message passing layers
-DROPOUT = 0.05          # dropout applied in both MP and FFN
+DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
 FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
@@ -230,6 +230,29 @@ test_loader  = make_dataloader("test",       target_cols=TARGET_COLS, batch_size
 train_dset = train_loader.dataset
 val_dset   = val_loader.dataset
 test_dset  = test_loader.dataset
+
+# ---- SMILES augmentation: add 1 randomized SMILES per train molecule --------
+from chemprop.data import MoleculeDatapoint
+from rdkit.Chem import MolToSmiles
+import random as _rnd
+
+_rnd.seed(SEED)
+_aug_dps = []
+for dp in list(train_dset.data):
+    if dp.mol is None:
+        continue
+    try:
+        aug_smi = MolToSmiles(dp.mol, doRandom=True)
+        aug_dp = MoleculeDatapoint.from_smi(aug_smi, dp.y.copy())
+        _aug_dps.append(aug_dp)
+    except Exception:
+        pass
+train_dset.data.extend(_aug_dps)
+print(f"SMILES augmentation: added {len(_aug_dps):,} augmented molecules (train now {len(train_dset):,})")
+
+# Rebuild train_loader with augmented dataset
+from chemprop.data import build_dataloader as _build_dl
+train_loader = _build_dl(train_dset, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, shuffle=True)
 
 # ---- Target scaling (fit on train, apply to val + test; inverse baked into model) --
 from chemprop.nn.transforms import UnscaleTransform
