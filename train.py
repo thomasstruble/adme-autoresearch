@@ -60,7 +60,7 @@ EXTRA_FEATURES_FN = None
 # Gasteiger charges as per-atom vertex descriptors (V_d)
 # ---------------------------------------------------------------------------
 USE_GASTEIGER_VD = False  # set to True to add Gasteiger charges as V_d
-USE_V1_FEATURIZER = True  # use chemprop v1 atom featurizer (133-dim vs default 72-dim)
+USE_V1_FEATURIZER = False  # use chemprop v1 atom featurizer (133-dim vs default 72-dim)
 
 # ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
@@ -211,7 +211,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         init_lr=config.init_lr,
         max_lr=config.max_lr,
         final_lr=config.final_lr,
-        metrics=[cp_metrics.RMSE(), cp_metrics.MAE()],
+        metrics=[cp_metrics.RMSE()],
     )
     return model
 
