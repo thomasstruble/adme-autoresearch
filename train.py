@@ -32,8 +32,8 @@ from prepare import TIME_BUDGET, AVAILABLE_TARGET_COLS, make_dataloader, evaluat
 # fmt: off
 TARGET_COLS = [
     "pEC50",
+    "pEC50_ci.upper",
     "Emax.vs.pos.ctrl_estimate (dimensionless)",
-    "Emax.vs.pos.ctrl_ci.upper (dimensionless)",
 ]
 # fmt: on
 
@@ -70,7 +70,7 @@ FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
 FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
-BATCH_SIZE = 48         # molecules per mini-batch
+BATCH_SIZE = 64         # molecules per mini-batch
 WARMUP_EPOCHS = 2       # epochs of LR warm-up
 INIT_LR = 1e-4          # starting learning rate
 MAX_LR = 8e-4           # peak learning rate
