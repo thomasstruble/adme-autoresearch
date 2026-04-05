@@ -178,7 +178,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         dropout=config.dropout,
     )
 
-    agg = AttentiveAggregation(input_dim=config.hidden_size)
+    agg = AttentiveAggregation(output_size=config.hidden_size)
 
     ffn_kwargs = dict(
         n_tasks=config.n_tasks,
