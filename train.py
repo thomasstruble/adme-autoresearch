@@ -67,7 +67,7 @@ USE_V1_FEATURIZER = False  # use chemprop v1 atom featurizer (133-dim vs default
 
 # Message passing
 DEPTH = 5               # number of bond message-passing steps
-HIDDEN_SIZE = 300       # hidden dimension in message passing layers
+HIDDEN_SIZE = 350       # hidden dimension in message passing layers
 DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
