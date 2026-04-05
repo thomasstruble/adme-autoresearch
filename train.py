@@ -160,7 +160,7 @@ class BestValLossCallback(Callback):
             pl_module.load_state_dict(self._best_state)
             print(f"  [BestValLoss] Restored weights from best val_loss={self.best_val_loss:.6f}")
 
-FINE_TUNE_SECS = 90  # last N seconds of training devoted to pEC50-only fine-tuning
+FINE_TUNE_SECS = 45  # last N seconds of training devoted to pEC50-only fine-tuning
 
 
 class TwoStageMixin:
@@ -210,9 +210,6 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
         metrics as cp_metrics,
     )
 
-    class TwoStageModel(TwoStageMixin, MPNN):
-        pass
-
     mp = AtomMessagePassing(
         depth=config.depth,
         d_v=d_v,
@@ -238,7 +235,7 @@ def build_model(config: MPNNConfig, output_transform=None, n_extra_features: int
 
     ffn = RegressionFFN(**ffn_kwargs)
 
-    model = TwoStageModel(
+    model = MPNN(
         message_passing=mp,
         agg=agg,
         predictor=ffn,
@@ -356,6 +353,8 @@ devices = 1
 # Chemprop default is ~max_epochs=50 – we set a large ceiling and rely on time.
 MAX_EPOCHS = 500
 
+best_val_callback = BestValLossCallback()
+
 trainer = pl.Trainer(
     accelerator=accelerator,
     devices=devices,
@@ -363,7 +362,7 @@ trainer = pl.Trainer(
     logger=True,
     enable_checkpointing=False,
     enable_progress_bar=True,
-    callbacks=[time_callback],
+    callbacks=[time_callback, best_val_callback],
 )
 
 print(f"\nStarting training (accelerator={accelerator}, max wall-clock={TIME_BUDGET}s)…\n")
