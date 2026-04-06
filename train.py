@@ -59,7 +59,7 @@ EXTRA_FEATURES_FN = None
 # Gasteiger charges as per-atom vertex descriptors (V_d)
 # ---------------------------------------------------------------------------
 USE_GASTEIGER_VD = False  # set to True to add Gasteiger charges as V_d
-USE_V1_FEATURIZER = False  # use chemprop v1 atom featurizer (133-dim vs default 72-dim)
+USE_V1_FEATURIZER = True  # use chemprop v1 atom featurizer (133-dim vs default 72-dim)
 
 # ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
@@ -68,7 +68,7 @@ USE_V1_FEATURIZER = False  # use chemprop v1 atom featurizer (133-dim vs default
 # Message passing
 DEPTH = 5               # number of bond message-passing steps
 HIDDEN_SIZE = 300       # hidden dimension in message passing layers
-DROPOUT = 0.1           # dropout applied in both MP and FFN
+DROPOUT = 0.0           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
 FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
