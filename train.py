@@ -66,7 +66,7 @@ USE_V1_FEATURIZER = False  # use chemprop v1 atom featurizer (133-dim vs default
 # ---------------------------------------------------------------------------
 
 # Message passing
-DEPTH = 4               # number of bond message-passing steps
+DEPTH = 5               # number of bond message-passing steps
 HIDDEN_SIZE = 300       # hidden dimension in message passing layers
 DROPOUT = 0.0           # dropout applied in both MP and FFN
 
@@ -78,7 +78,7 @@ FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 BATCH_SIZE = 64         # molecules per mini-batch
 WARMUP_EPOCHS = 2       # epochs of LR warm-up
 INIT_LR = 1e-4          # starting learning rate
-MAX_LR = 8e-4           # peak learning rate
+MAX_LR = 1e-3           # peak learning rate
 FINAL_LR = 1e-4         # final learning rate after decay
 
 # Misc
