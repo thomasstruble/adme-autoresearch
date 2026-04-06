@@ -68,14 +68,14 @@ USE_V1_FEATURIZER = False  # use chemprop v1 atom featurizer (133-dim vs default
 # Message passing
 DEPTH = 5               # number of bond message-passing steps
 HIDDEN_SIZE = 300       # hidden dimension in message passing layers
-DROPOUT = 0.0           # dropout applied in both MP and FFN
+DROPOUT = 0.1           # dropout applied in both MP and FFN
 
 # Feed-forward network (predictor)
 FFN_NUM_LAYERS = 2      # number of FFN layers after aggregation
 FFN_HIDDEN_SIZE = 300   # hidden dimension in FFN
 
 # Training schedule (Noam / warm-up cosine used by chemprop MPNN)
-BATCH_SIZE = 32         # molecules per mini-batch
+BATCH_SIZE = 64         # molecules per mini-batch
 WARMUP_EPOCHS = 2       # epochs of LR warm-up
 INIT_LR = 1e-4          # starting learning rate
 MAX_LR = 8e-4           # peak learning rate
