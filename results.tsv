@@ -1,0 +1,230 @@
+commit	test_mean_rmse	pEC50_rmse	memory_gb	status	description
+34cc55f	3.492791	4.370259	0.1	keep	baseline
+d1b48ed	3.503864	4.410900	0.2	discard	DEPTH=4 HIDDEN=512 FFN_LAYERS=3 - larger model ran fewer epochs worse
+764abe8	3.493210	4.378020	0.1	discard	AttentiveAggregation - marginal worse than NormAgg
+517a72f	0.000000	0.000000	0.0	crash	Morgan FP 1024-bit extra features - shape mismatch fixed but worse
+34434f7	3.548786	4.468657	0.1	discard	Morgan FP 1024-bit extra features - much worse
+22c2bc8	3.508523	4.430163	0.1	discard	MeanAggregation - worse than NormAgg for this task
+716bea3	3.513019	4.417867	0.1	discard	3x LR schedule - worse
+41a0a49	3.479815	4.357679	0.1	keep	BATCH_SIZE=32 - improvement pEC50 4.370->4.358
+d60b4a5	3.500818	4.444644	0.0	discard	BATCH_SIZE=16 - too small noisy
+20622a8	3.491891	4.366410	0.1	discard	bias=True in BondMessagePassing - slightly worse than batch32 alone
+5d832fa	3.485966	4.410811	0.1	discard	DROPOUT=0.1 - worse pEC50
+ec6780a	3.493504	4.406114	0.1	discard	MAX_LR=2e-3 with batch32 - worse
+9da5d58	3.478499	4.370840	0.1	discard	ELU activation - test_mean improved but pEC50 worse
+8dfc101	3.509473	4.451947	0.1	discard	FFN_NUM_LAYERS=3 - worse
+4267e07	3.481512	4.384737	0.1	discard	WARMUP_EPOCHS=10 - worse
+2c22027	3.484819	4.355163	0.1	keep	NormAgg norm=25 + batch32 - pEC50 improvement 4.358->4.355
+a66f2ea	3.472291	4.359942	0.1	discard	AdamW weight_decay=1e-4 - mean improved but pEC50 slightly worse
+39e0d82	3.488487	4.400134	0.1	discard	task_weights=[2.0,1.0] - hurt shared rep hurts pEC50
+50b9aa3	3.511113	4.389740	0.1	discard	BATCH_NORM=False - worse without BN
+67b5d9b	3.534809	4.473413	0.1	discard	gradient_clip_val=1.0 - kills Noam schedule
+caead04	3.495877	4.422461	0.0	discard	DEPTH=2 - loses representation power
+3e13e3d	3.507083	4.433692	0.1	discard	HIDDEN=400 - wider model fewer epochs worse
+5b3b3bc	3.473183	4.366958	0.1	discard	FINAL_LR=1e-5 - worse pEC50
+01517c0	3.501665	4.395767	0.1	discard	NormAgg norm=15 - worse than norm=25
+1ce2810	3.504071	4.421824	0.1	discard	AdamW weight_decay=1e-5 - worse pEC50
+4820906	3.517423	4.422975	0.1	discard	undirected=True BondMessagePassing - worse
+d17bc9f	3.501709	4.403768	0.1	discard	SEED=0 - worse than seed 42
+f5890fc	3.498945	4.416137	0.1	discard	AtomMessagePassing - worse than BondMessagePassing
+49ad4ed	3.478188	4.363858	0.1	discard	5 physchem features (MolWt LogP HBD HBA TPSA) - close but worse
+34936bd	3.510683	4.417805	0.1	discard	SWA swa_lrs=1e-3 epoch_start=100 - conflicts with Noam schedule
+9b683dd	3.521831	4.430449	0.1	discard	NormAgg norm=30 - worse than norm=25
+c13f738	3.502764	4.408041	0.1	discard	NormAgg norm=20 - worse than norm=25
+c2e10ff	4.410662	4.410662	0.1	discard	single-task pEC50 only - multi-task Emax helps
+d18eec4	3.486859	4.362296	0.1	discard	HIDDEN=256 - smaller model didnt give more steps
+0d1e617	3.497283	4.424484	0.1	discard	BATCH=24 - worse noisy gradients
+0377a32	3.464874	4.374024	0.1	discard	leakyrelu - best mean_rmse ever but pEC50 worse
+62adedb	3.511338	4.416611	0.1	discard	LogP-only extra feature - worse
+71b7736	3.500472	4.389235	0.1	discard	DEPTH=4 HIDDEN=256 - more depth didnt help
+63999f2	3.497568	4.404968	0.1	discard	PReLU activation - worse
+8de1eb6	3.517802	4.452229	0.1	discard	BestValLoss callback - model improves throughout training no overfitting
+f221550	3.482027	4.365220	0.1	discard	leakyrelu FFN only - still worse than relu
+6cc7fe6	3.486452	4.394323	0.1	discard	WARMUP_EPOCHS=1 - worse
+02aee37	3.482777	4.392186	0.1	discard	INIT_LR=1e-3 skip warmup - worse
+6ad4928	3.502756	4.391785	0.1	discard	bias=True BondMP - worse
+fddd7ff	3.514457	4.430017	0.1	discard	DROPOUT=0.05 - worse even light dropout hurts
+7e1803c	3.492994	4.409412	0.1	discard	MAX_LR=8e-4 - worse
+e916ac3	3.489607	4.389638	0.1	discard	FFN_LAYERS=3 FFN_HIDDEN=200 - worse
+44dad66	3.500574	4.395171	0.1	discard	tanh activation - worse ReLU still best
+ccb9a1e	3.522814	4.430192	0.1	discard	HIDDEN=350 - worse than 300
+84cc923	3.509301	4.424507	0.1	discard	BATCH=40 - worse batch=32 is sweet spot
+549c60c	3.525244	4.430892	0.1	discard	LayerNorm instead of BatchNorm - worse
+f8e8240	3.496466	4.409048	0.1	discard	CosineAnnealingLR - worse than Noam
+67f736d	3.497449	4.396888	0.1	discard	MAE training criterion - worse
+0039f14	3.491521	4.383701	0.1	discard	MAX_EPOCHS=180 tune Noam cooldown - worse
+78a5b71	3.514101	4.425772	0.1	discard	task_weights=[1.0,0.5] - worse task weighting always hurts
+b917efb	3.515709	4.412018	0.1	discard	SEED=123 - worse seed 42 is best
+21714bc	3.497542	4.415639	0.1	discard	float32 precision=highest - fewer epochs worse
+1891d8b	3.502844	4.430408	0.1	discard	AdamW weight_decay=1e-6 - Adam consistently beats AdamW here
+db33610	3.516812	4.417673	0.1	discard	accumulate_grad_batches=2 - worse
+f6c4fd2	3.927361	4.394241	0.1	discard	pEC50+CI+Emax 4 targets - mean RMSE blew up
+56b304d	4.404431	4.422758	0.1	discard	pEC50+CI bounds only - worse pEC50+Emax is best combo
+b6cabea	2.776818	4.353983	0.1	keep	pEC50+Emax+Emax.vs.pos.ctrl 3 targets - new best pEC50 4.355->4.354
+7b5280f	2.328421	4.445632	0.1	discard	4th target pEC50_std.error - worse pEC50
+2697778	2.775493	4.429963	0.1	discard	3-target + NormAgg norm=20 - worse
+88a800c	2.794958	4.432689	0.1	discard	3-target + NormAgg norm=30 - worse
+70ffee5	2.795691	4.474641	0.1	discard	3-target + DEPTH=4 - worse
+ae80223	2.790883	4.424555	0.1	discard	3-target + HIDDEN=256 - worse
+5dbf679	2.758936	4.345660	0.1	keep	3-target + BATCH=64 - NEW BEST pEC50 4.354->4.346
+9aeca98	2.786710	4.389429	0.1	discard	3-target + BATCH=64 + HIDDEN=350 - worse
+e90014b	2.767370	4.385057	0.1	discard	3-target + BATCH=64 + DEPTH=4 - worse
+eaf6e8c	2.765621	4.345726	0.1	discard	MAX_LR=1.5e-3 - tied with best
+9570212	2.767003	4.394874	0.1	discard	MAX_LR=2e-3 - too high
+aa40490	2.786564	4.394169	0.1	discard	3-target + BATCH=64 + NormAgg norm=35 - worse
+29fe4b3	2.775152	4.391450	0.1	discard	3-target + BATCH=64 + FFN_LAYERS=3 - worse
+d2fcff5	2.776966	4.390905	0.2	discard	3-target + BATCH=128 - too large
+4fccd11	2.767969	4.370112	0.1	discard	3-target + BATCH=64 + leakyrelu FFN - worse
+4de4dc6	2.800464	4.453063	0.1	discard	3-target + BATCH=64 + bias=True MP - worse
+dba019a	2.779896	4.376289	0.1	discard	3-target + BATCH=64 + WARMUP=3 - worse
+cfc0116	2.811763	4.487147	0.1	discard	3-target + BATCH=64 + MeanAgg - worse NormAgg important
+48de532	2.782879	4.399131	0.1	discard	3-target + BATCH=64 + AttentiveAgg - worse
+d874630	2.780914	4.416242	0.1	discard	3-target + BATCH=64 + INIT_LR=5e-4 - worse
+5d38905	2.771017	4.361404	0.1	discard	3-target + BATCH=64 + DROPOUT=0.05 - worse
+9b6407b	3.268382	4.498555	0.1	discard	6 targets - too many dilutes pEC50 focus
+2b917ac	2.333647	4.402061	0.1	discard	4 targets +Emax_std_error - worse
+6abe0d4	2.764033	4.414964	0.1	discard	3-target + BATCH=64 + HIDDEN=400 - worse
+4361d87	2.807078	4.437562	0.1	discard	3-target + BATCH=96 - worse
+4bbe867	2.392321	4.433908	0.1	discard	4 targets +Emax.pos.ctrl CI lower - worse
+854c60d	2.781631	4.401879	0.1	discard	3-target + BATCH=64 + FINAL_LR=5e-5 - worse
+4017457	2.774960	4.378775	0.1	discard	3-target + task_weights=[1.5,1.0,0.5] - worse
+8767677	2.644516	4.417002	0.1	discard	Emax.vs.pos.ctrl std.error as 3rd target - worse
+96ea8b3	2.474811	4.343035	0.1	keep	3-target pEC50+Emax.vs.pos.ctrl_estimate+ci.upper BATCH=64 - NEW BEST
+71d5eb2	2.329691	4.472250	0.1	discard	pEC50+Emax.vs.pos.ctrl estimate+ci.lower - worse
+86997f1	2.528024	4.386262	0.1	discard	4-target add Emax_estimate to exp89 - worse
+0ad7406	2.506802	4.452621	0.1	discard	NormAgg norm=22 with exp89 targets - worse
+4936b82	2.511775	4.390181	0.1	discard	NormAgg norm=27 with exp89 targets - worse
+5c4b8e7	2.490359	4.382076	0.1	discard	SEED=7 with exp89 config - worse
+de9419e	2.500321	4.381825	0.1	discard	SEED=99 with exp89 config - worse
+f3d371c	2.522172	4.453807	0.1	discard	FFN_HIDDEN=400 with exp89 targets - worse
+d9c4903	2.512329	4.417881	0.1	discard	FFN_LAYERS=1 with exp89 targets - worse
+88c9bed	2.497884	4.385554	0.1	discard	MAX_LR=1.2e-3 with exp89 targets - worse
+ee834b9	2.495709	4.332347	0.1	keep	AtomMessagePassing with exp89 3-target BATCH=64 - NEW BEST
+06a3559	2.500316	4.382022	0.1	discard	AtomMP + HIDDEN=350 - worse
+c4e0dad	2.545650	4.467330	0.1	discard	AtomMP + DEPTH=4 - worse
+f3d6532	2.501023	4.367233	0.1	discard	AtomMP + norm=20 - worse
+61b4b6c	2.495185	4.382491	0.1	discard	AtomMP + norm=30 - worse
+9245f06	2.488855	4.391305	0.1	discard	AtomMP + BATCH=32 - worse
+69e9ab4	2.502104	4.362273	0.1	discard	AtomMP + MAX_LR=1.5e-3 - worse
+6e2bbe2	2.499841	4.400632	0.1	discard	AtomMP + DROPOUT=0.05 - worse
+bf4d31e	2.499932	4.385064	0.1	discard	AtomMP + bias=True - worse
+8c3463c	2.496043	4.397866	0.1	discard	AtomMP + WARMUP=3 - worse
+c6e3c60	2.516176	4.471432	0.1	discard	AtomMP + task_weights=[1.5,1.0,0.5] - worse
+5d663dd	2.516879	4.397884	0.1	discard	AtomMP + HIDDEN=256 - worse
+ffc781d	2.486218	4.334504	0.1	discard	AtomMP + INIT_LR=5e-4 - tied with best
+acb92b1	2.510482	4.359407	0.1	discard	AtomMP + INIT=5e-4 + MAX=1.5e-3 - worse
+62f29fd	2.510371	4.403634	0.1	discard	AtomMP + FINAL_LR=5e-5 - worse
+546a433	2.527324	4.448845	0.1	discard	AtomMP + BATCH=128 - worse
+4b3d848	2.514136	4.415663	0.1	discard	AtomMP + FFN_LAYERS=3 FFN_HIDDEN=200 - worse
+311623c	3.363005	4.392452	0.1	discard	AtomMP + Emax_estimate + Emax_ci.upper - worse
+922b928	3.520084	4.419069	0.1	discard	AtomMP + pEC50+Emax_estimate 2-target - worse
+7512071	2.189628	4.455933	0.1	discard	AtomMP + all 3 Emax.vs.pos.ctrl - worse
+a4a705d	2.533221	4.437302	0.1	discard	AtomMP + BATCH=96 - worse
+c721665	2.519522	4.361566	0.1	discard	AtomMP + leakyrelu FFN - worse
+a1ef772	2.491189	4.369338	0.1	discard	AtomMP + leakyrelu in MP - worse
+0aaaac0	2.546646	4.415087	0.1	discard	AtomMP + accumulate_grad_batches=2 - worse
+b7d22f1	2.519473	4.406806	0.1	discard	AtomMP + DEPTH=2 - worse
+d4216be	2.498772	4.346290	0.1	discard	AtomMP + HIDDEN=400 FFN_HIDDEN=400 - worse
+f5c9b3f	2.499624	4.397509	0.1	discard	AtomMP + HIDDEN=450 FFN_HIDDEN=400 - worse
+43feea1	2.523782	4.413995	0.1	discard	AtomMP + HIDDEN=320 - worse
+13cdc45	2.528271	4.452550	0.1	discard	AtomMP + BATCH_NORM=False - worse
+b8f1c1e	2.516023	4.412555	0.1	discard	AtomMP + BATCH=80 - worse
+565e7b8	2.474859	4.291718	0.1	keep	AtomMP + MAX_LR=8e-4 - NEW BEST
+2115c4b	2.487649	4.404933	0.1	discard	AtomMP + MAX_LR=7e-4 - worse
+6e9ff5d	2.492551	4.360338	0.1	discard	AtomMP + MAX_LR=9e-4 - worse
+aa9362c	2.524420	4.438129	0.1	discard	AtomMP + MAX_LR=8e-4 + BATCH=32 - worse
+6d4e7f6	2.514832	4.430018	0.1	discard	AtomMP + MAX_LR=8e-4 + DEPTH=4 - worse
+2248bd9	2.509269	4.359342	0.1	discard	AtomMP + MAX_LR=8e-4 + HIDDEN=350 - worse
+1cc4365	2.497752	4.355849	0.1	discard	AtomMP + MAX_LR=8e-4 + norm=20 - worse
+31a86b4	2.526911	4.471254	0.1	discard	AtomMP + MAX_LR=8e-4 + norm=30 - worse
+f513844	2.496872	4.421981	0.1	discard	AtomMP + MAX_LR=8e-4 + WARMUP=1 - worse
+52421f6	2.486035	4.330589	0.1	discard	AtomMP + MAX_LR=8e-4 + INIT_LR=2e-4 - tied
+32f147f	2.514937	4.463762	0.1	discard	AtomMP + MAX_LR=8e-4 + BATCH=48 - worse
+ab8f263	2.884077	4.417457	0.1	discard	AtomMP + pEC50_ci.upper as target - worse/invalid
+cf4bfbe	2.913202	4.475818	0.1	discard	AtomMP + MAX_LR=8e-4 + 2-target no ci.upper - worse
+81381a8	2.501485	4.360475	0.1	discard	AtomMP + MAX_LR=8e-4 + DROPOUT=0.1 - worse
+52171c2	2.506004	4.368423	0.1	discard	AtomMP + MAX_LR=8e-4 + SEED=7 - worse
+9bd065c	2.518006	4.426035	0.1	discard	AtomMP + MAX_LR=8e-4 + SEED=123 - worse
+84dea8b	2.484252	4.339602	0.1	discard	AtomMP + MAX_LR=8e-4 + FFN_LAYERS=3 - worse
+0475858	2.494541	4.362216	0.1	discard	AtomMP + MAX_LR=8e-4 + AttentiveAgg - worse
+d7a9efb	2.493285	4.370174	0.1	discard	AtomMP + MAX_LR=8e-4 + MeanAgg - worse
+4221b6b	2.506187	4.346877	0.1	discard	AtomMP + MAX_LR=8e-4 + undirected=True - worse
+c6c1238	2.510300	4.392554	0.1	discard	AtomMP + MAX_LR=8e-4 + FFN_HIDDEN=350 - worse
+27b1451	2.507833	4.335833	0.1	discard	AtomMP + MAX_LR=8e-4 + 5 physchem features - worse
+753ef4d	2.497063	4.400437	0.1	discard	BondMP + MAX_LR=8e-4 - AtomMP still better
+45c06de	2.504472	4.384944	0.1	discard	AtomMP + MAX_LR=8e-4 + WARMUP=3 - worse
+ac1fbd2	2.502109	4.404035	0.1	discard	AtomMP + MAX_LR=8e-4 + FINAL_LR=2e-4 - worse
+4b8844d	2.928163	4.360212	0.1	discard	AtomMP + Emax_estimate + Emax.vs.pos.ctrl_ci.upper - worse
+b86ea4f	2.532825	4.485958	0.1	discard	AtomMP + MAX_LR=8e-4 + HIDDEN=280 - worse despite more epochs
+18adbae	2.498432	4.374284	0.1	discard	AtomMP + MAX_LR=8e-4 + ELU FFN - worse
+51a485b	2.489068	4.409906	0.1	discard	AtomMP + MAX_LR=8e-4 + MAE criterion - worse
+80e3e45	2.520068	4.353281	0.1	discard	AtomMP + MAX_LR=8e-4 + 4-target - worse
+504edda	2.506473	4.460310	0.1	discard	AtomMP + MAX_LR=8e-4 + task_weights=[1.0,2.0,1.0] - worse
+55f485c	2.526389	4.455014	0.1	discard	AtomMP + MAX_LR=8e-4 + task_weights=[2.0,1.0,1.0] - worse
+36f5b0d	2.500866	4.393530	0.1	discard	AtomMP + MAX_LR=8e-4 + DROPOUT=0.02 - worse
+59ff37b	2.520348	4.415807	0.1	discard	AtomMP + MAX_LR=8e-4 + norm=23 - worse
+cd075c9	2.485992	4.357496	0.1	discard	AtomMP + MAX_LR=8e-4 + bf16-mixed - worse
+417249f	2.503358	4.391585	0.1	discard	AtomMP + MAX_LR=8e-4 + PReLU in MP - worse
+5e6f155	2.520303	4.433823	0.1	discard	AtomMP + MAX_LR=8e-4 + tanh in MP - worse
+b0c4a86	2.515040	4.403279	0.1	discard	AtomMP + MAX_LR=8e-4 + BATCH=72 - worse
+b2c2dd8	2.507056	4.409608	0.1	discard	AtomMP + MAX_LR=8e-4 + MAX_EPOCHS=200 calibrated - worse
+fcb36dd	2.140494	4.430588	0.1	discard	AtomMP + Emax_std.error 4th target - worse
+b4a411e	3.053103	4.315937	0.1	discard	AtomMP + 2-target ci.upper only - worse
+9bad6c3	2.108414	4.406548	0.1	discard	AtomMP + Emax.vs.pos.ctrl_std.error 4th target - worse
+363327f	2.509370	4.408087	0.1	discard	AtomMP + AdamW weight_decay=1e-4 - worse
+36f18fa	2.506186	4.426435	0.1	discard	AtomMP + NormAgg norm=35 - worse
+e28efd7	2.478198	4.361755	0.1	discard	AtomMP + DROPOUT=0.05 - worse
+24dbae5	2.493795	4.388393	0.1	discard	AtomMP + SMILES augmentation 1x - worse (fewer epochs)
+26d920f	2.520886	4.430212	0.1	discard	AtomMP + INIT_LR=1.5e-4 - worse
+6f859e1	2.496737	4.381842	0.1	discard	AtomMP + HIDDEN=290 - worse
+d1d5a45	2.515836	4.403665	0.1	discard	AtomMP + pure decay WARMUP=0 INIT=MAX_LR=8e-4 - worse
+252e68a	2.515021	4.406507	0.1	discard	AtomMP + Morgan FP 2048-bit extra features - worse
+66e3ccd	2.511828	4.478065	0.1	discard	AtomMP + MAX_EPOCHS=750 slower LR decay - worse
+8e0f48a	2.502224	4.355789	0.1	discard	AtomMP + Gasteiger charges as V_d atom descriptors - worse
+75036d0	2.506745	4.426182	0.1	discard	AtomMP + SWA swa_lrs=1e-4 - worse
+467403c	2.519897	4.415006	0.1	discard	AtomMP + V1 atom featurizer 133-dim - worse
+5910491	2.512227	4.408293	0.1	discard	AtomMP + only RMSE metric for val_loss - worse
+4f57f0b	2.491055	4.303528	0.1	discard	AtomMP + SEED=0 - worse
+dfa6542	2.499472	4.334867	0.1	discard	AtomMP + SEED=1 - worse
+d247736	2.495012	4.338869	0.1	discard	AtomMP + SEED=2 - worse
+1d89ee7	2.489297	4.337105	0.1	discard	AtomMP + SEED=3 - worse
+bc5a232	2.492467	4.348266	0.1	discard	AtomMP + task_weights=[3,1,1] - worse
+8329122	3.062064	4.395397	0.1	discard	exp189: 4-target+pEC50_ci.upper - worse
+70e6fc9	4.408011	4.431610	0.1	discard	exp190: 3-target pEC50+ci.lower+ci.upper - worse
+aaf39ad	2.505590	4.381312	0.1	discard	exp191: FINAL_LR=5e-5 - worse than 1e-4
+0c40b09	2.506696	4.425252	0.1	discard	exp192: SiLU activation in FFN - worse than ReLU
+ce65f20	2.513193	4.403379	0.1	discard	exp193: Huber loss delta=1.0 - worse than MSE
+2798961	2.502498	4.381977	0.1	discard	exp194: fingerprint noise std=0.05 - worse
+b64e4d4	2.512423	4.403431	0.1	discard	exp195: MABAtomMessagePassing W_vo output layer - worse
+66b0371	2.525278	4.392680	0.1	discard	exp196: OneCycleLR cosine - worse than Noam exponential
+b4248dd	2.518430	4.430017	0.1	discard	exp197: CosineAnnealingWarmRestarts - custom schedulers consistently worse
+3fa435c	2.509513	4.452220	0.1	discard	exp200: CI-based sample weighting (inverse sqrt CI width) - worse
+d760136	2.506724	4.347205	0.1	discard	exp201: two-stage 3-task→pEC50-only fine-tune (45s) - worse
+f895f5e	2.546226	4.363151	0.1	discard	exp202: two-stage FINE_TUNE_SECS=90 - more fine-tune worse
+3992a10	2.510093	4.291161	0.1	keep	exp203: BestValLossCallback activated - NEW BEST 4.2918->4.2912
+a701ac9	2.512891	4.439048	0.1	discard	exp204: two-stage+BestValLoss combined - fine-tune breaks val recovery
+eda33d6	2.598765	4.896971	0.1	discard	exp205: TopK weight avg K=5 - averaging across LR stages destroys model
+8f16cd0	2.525957	4.398005	0.1	discard	exp206: TTA N=8 random SMILES - TTA added overhead, run variance worse
+61476af	2.491048	4.412207	0.1	discard	exp207: EMA decay=0.999 - EMA blurs the optimal epoch found by BestValLoss
+8893f34	2.495185	4.375462	0.1	discard	exp208: ELU in AtomMessagePassing - message passing activation doesnt help
+e79ae95	2.446735	4.335839	0.1	discard	exp209: V1RDKit2DNorm 200-dim extra features - best mean RMSE ever but pEC50 worse
+c3c7b4f	2.519693	4.481910	0.1	discard	exp210: RDKit2D + FFN_HIDDEN=400 - larger FFN hurts optimization
+8d89dfc	2.550404	4.463504	0.1	discard	exp211: FFN-only pEC50 fine-tune - corrupts shared FFN hidden rep
+2f1a565	2.561477	4.375210	0.1	discard	exp212: pEC50 output-row-only fine-tune (20s) - all fine-tune approaches degrade base
+83b3c9e	2.505791	4.420022	0.1	discard	exp213: 2-model ensemble SEED=42+0 (140s each) - undertrained, worse
+e2c9bec	2.492679	4.355809	0.1	discard	exp214: SEED=0 full budget BestValLossCallback - SEED=42 consistently better
+11c2955	2.467307	4.304462	0.2	discard	exp215: DEPTH=5 - close to best but still worse; promising direction
+2db6c27	2.507194	4.360905	0.2	discard	exp216: DEPTH=6 - worse than DEPTH=5; optimal depth around 3-5
+fcaa427	2.484420	4.355225	0.2	discard	exp217: DEPTH=5+HIDDEN=400 - wider model harder to optimize in fixed budget
+32e28c7	2.510203	4.438062	0.1	discard	exp218: FFN_NUM_LAYERS=3 - deeper FFN hurts
+39e676f	2.569303	4.626226	0.1	discard	exp219: NormAgg norm=20 - much worse, larger aggregation scale destroys performance
+6c4b028	2.506749	4.372665	0.1	discard	exp220: task_weights=[3,1,1] pEC50 upweight - hurts (Emax tasks regularize)
+c80fc5a	2.477284	4.244526	0.1	keep	exp221: task_weights=[2,1,1] pEC50 2x weight - NEW BEST 4.2445
+e2700cd	2.548586	4.447970	0.1	discard	exp222: task_weights=[1.5,1,1] - [2,1,1] remains best weight
+43ab416	2.475916	4.219958	0.2	keep	exp223: DEPTH=5+task_weights=[2,1,1] - NEW BEST 4.2200
+d00d62d	2.483557	4.481054	0.2	discard	exp224: DEPTH=5+[2,1,1]+HIDDEN=350 - wider harder to optimize, worse
+a02d3d3	2.543785	4.491784	0.1	discard	exp225: DEPTH=4+[2,1,1] - DEPTH=5 clearly best
+f2a8ecb	2.523533	4.405540	0.2	discard	exp226: DEPTH=5+[2,1,1]+MAX_LR=1e-3 - higher LR worse
+5662bfd	2.524412	4.378728	0.2	discard	exp227: DEPTH=5+[2,1,1]+MAX_LR=6e-4 - MAX_LR=8e-4 remains optimal
+52d409d	2.506954	4.372481	0.1	discard	exp228: DEPTH=5+[2,1,1]+BATCH=32 - BATCH=64 remains best
+4e2571e	2.533047	4.467596	0.2	discard	exp229: DEPTH=5+[2,1,1]+DROPOUT=0.1 - dropout hurts

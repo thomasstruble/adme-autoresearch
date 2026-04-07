@@ -14,10 +14,21 @@ from datasets import load_dataset, load_from_disk
 
 TIME_BUDGET = 150        # training time budget in seconds (5 minutes)
 
-# Regression target columns present in the dataset
-TARGET_COLS = [
+# All numeric columns available as regression targets in the default split.
+# train.py picks a subset of these as TARGET_COLS.
+AVAILABLE_TARGET_COLS = [
     "pEC50",
+    "pEC50_ci.lower (-log10(molarity))",
+    "pEC50_ci.upper (-log10(molarity))",
     "Emax_estimate (log2FC vs. baseline)",
+    "Emax_ci.lower (log2FC vs. baseline)",
+    "Emax_ci.upper (log2FC vs. baseline)",
+    "Emax.vs.pos.ctrl_estimate (dimensionless)",
+    "Emax.vs.pos.ctrl_ci.lower (dimensionless)",
+    "Emax.vs.pos.ctrl_ci.upper (dimensionless)",
+    "pEC50_std.error (-log10(molarity))",
+    "Emax_std.error (log2FC vs. baseline)",
+    "Emax.vs.pos.ctrl_std.error (dimensionless)",
 ]
 
 # ---------------------------------------------------------------------------
@@ -28,8 +39,8 @@ CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "autoresearch")
 DATA_DIR = os.path.join(CACHE_DIR, "data")
 BASE_REPO = "openadmet/pxr-challenge-train-test"
 
-VAL_FRACTION  = 0.1   # fraction of training data held out for validation
-TEST_FRACTION = 0.1   # fraction of training data held out for local test
+VAL_FRACTION  = 0.05  # fraction of training data held out for validation
+TEST_FRACTION = 0.01   # fraction of training data held out for local test
 SPLIT_SEED = 42
 
 
@@ -56,9 +67,10 @@ def download_data():
     train_ds   = split1["train"]
     remainder  = split1["test"]
 
+    test_size = TEST_FRACTION / (VAL_FRACTION + TEST_FRACTION)  # relative to the remainder
     # Split the 20 % remainder evenly into val (10 %) and test (10 %)
     split2 = remainder.train_test_split(
-        test_size=0.5,
+        test_size=test_size,
         seed=SPLIT_SEED,
         shuffle=True,
     )
@@ -77,13 +89,19 @@ def download_data():
 # ---------------------------------------------------------------------------
 # Runtime utilities (imported by train.py)
 # ---------------------------------------------------------------------------
-def make_dataloader(split: str = "train", batch_size: int = 64, num_workers: int = 10):
+def make_dataloader(
+    split: str = "train",
+    target_cols: list[str] | None = None,
+    batch_size: int = 64,
+    num_workers: int = 10,
+    extra_features_fn=None,
+):
     """
     Build a chemprop-compatible DataLoader for the requested dataset split.
 
     The function loads the HuggingFace dataset from disk (written by
     ``download_data``), converts it to a list of ``MoleculeDatapoint`` objects
-    using the SMILES column as input and ``TARGET_COLS`` as regression targets,
+    using the SMILES column as input and ``target_cols`` as regression targets,
     and wraps everything in a ``MoleculeDataset`` + ``build_dataloader``.
 
     Missing target values (NaN / null) are kept as ``np.nan`` in the ``y``
@@ -95,11 +113,20 @@ def make_dataloader(split: str = "train", batch_size: int = 64, num_workers: int
     split : str
         One of ``"train"``, ``"validation"``, or ``"test"`` (saved by
         ``download_data``).
+    target_cols : list[str] | None
+        Columns from the dataset to use as regression targets.  Must be a
+        subset of ``AVAILABLE_TARGET_COLS``.  Defaults to
+        ``["pEC50", "Emax_estimate (log2FC vs. baseline)"]`` when ``None``.
     batch_size : int
         Number of molecules per mini-batch.
     num_workers : int
         Worker processes for parallel graph featurization.  Set > 0 on Linux
         for faster loading; keep at 0 on Windows / macOS to avoid hangs.
+    extra_features_fn : callable | None
+        Optional function ``(smiles: str) -> np.ndarray | None`` that returns
+        extra molecule-level descriptors appended as ``x_d`` to each
+        ``MoleculeDatapoint``.  Return ``None`` to skip a molecule.  Set to
+        ``None`` (default) to use no extra features.
 
     Returns
     -------
@@ -110,21 +137,12 @@ def make_dataloader(split: str = "train", batch_size: int = 64, num_workers: int
     from chemprop.data import MoleculeDatapoint, MoleculeDataset
     from chemprop.data.dataloader import build_dataloader
 
+    if target_cols is None:
+        target_cols = ["pEC50", "Emax_estimate (log2FC vs. baseline)"]
+
     split_path = os.path.join(DATA_DIR, split)
     hf_dataset = load_from_disk(split_path)
     df = hf_dataset.to_pandas()
-
-    # # Some numeric columns may arrive as strings with thousand-separators
-    # # (e.g. "1,351.1").  Normalise them to plain floats.
-    # for col in TARGET_COLS:
-    #     if col in df.columns:
-    #         df[col] = (
-    #             df[col]
-    #             .astype(str)
-    #             .str.replace(",", "", regex=False)
-    #             .replace({"nan": np.nan, "None": np.nan, "null": np.nan})
-    #             .astype(float)
-    #         )
 
     datapoints: list[MoleculeDatapoint] = []
     for _, row in df.iterrows():
@@ -136,17 +154,23 @@ def make_dataloader(split: str = "train", batch_size: int = 64, num_workers: int
         y = np.array(
             [
                 float(row[col]) if col in df.columns and pd.notna(row[col]) else np.nan
-                for col in TARGET_COLS
+                for col in target_cols
             ],
             dtype=np.float32,
         )
 
+        # Optional extra molecule-level features (e.g. RDKit descriptors)
+        x_d = None
+        if extra_features_fn is not None:
+            x_d = extra_features_fn(smi.strip())
+            if x_d is not None:
+                x_d = np.asarray(x_d, dtype=np.float32)
+
         try:
-            dp = MoleculeDatapoint.from_smi(
-                smi.strip(),
-                y,
-                name=str(row.get("Molecule Name", smi)),
-            )
+            kwargs = dict(name=str(row.get("Molecule Name", smi)))
+            if x_d is not None:
+                kwargs["x_d"] = x_d
+            dp = MoleculeDatapoint.from_smi(smi.strip(), y, **kwargs)
             datapoints.append(dp)
         except Exception:
             # Skip molecules that RDKit cannot parse
@@ -171,7 +195,7 @@ def make_dataloader(split: str = "train", batch_size: int = 64, num_workers: int
 # ---------------------------------------------------------------------------
 
 @torch.no_grad()
-def evaluate_regression(model, val_loader, batch_size: int = 64):
+def evaluate_regression(model, val_loader, target_cols: list[str], batch_size: int = 64):
     """
     Evaluate a chemprop MPNN on a validation DataLoader using per-task RMSE.
 
@@ -194,6 +218,9 @@ def evaluate_regression(model, val_loader, batch_size: int = 64):
     val_loader : torch.utils.data.DataLoader
         DataLoader produced by ``make_dataloader`` for the validation or test
         split (``shuffle=False``).
+    target_cols : list[str]
+        The column names used as regression targets (must match what was passed
+        to ``make_dataloader``).
     batch_size : int
         Unused — kept for API compatibility; batch size is fixed on the loader.
 
@@ -201,7 +228,7 @@ def evaluate_regression(model, val_loader, batch_size: int = 64):
     -------
     dict with keys:
         ``"rmse_per_task"``  ``list[float]`` RMSE for each target in
-                            ``TARGET_COLS``; ``float('nan')`` if no labels.
+                            ``target_cols``; ``float('nan')`` if no labels.
         ``"mean_rmse"``     ``float`` mean RMSE across tasks with valid labels.
         ``"per_task"``      ``dict[str, float]`` mapping target name → RMSE.
     """
@@ -246,7 +273,7 @@ def evaluate_regression(model, val_loader, batch_size: int = 64):
     valid_rmses = [r for r in rmse_per_task if not np.isnan(r)]
     mean_rmse = float(np.mean(valid_rmses)) if valid_rmses else float("nan")
 
-    per_task = {col: rmse_per_task[i] for i, col in enumerate(TARGET_COLS)}
+    per_task = {col: rmse_per_task[i] for i, col in enumerate(target_cols)}
 
     return {
         "rmse_per_task": rmse_per_task,
