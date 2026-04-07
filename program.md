@@ -96,7 +96,7 @@ commit test_mean_rmse pEC50_rmse	memory_gb	status	description
 ```
 
 1. git commit hash (short, 7 chars)
-2. mean_rmse achieved (e.g. 1.234567) — use 0.000000 for crashes
+2. test_rmse achieved (e.g. 1.234567) — use 0.000000 for crashes
 3. pEC50 rmse achieved - use 0.000000 for crashes
 4. peak memory in GB, round to .1f (e.g. 12.3 — divide peak_vram_mb by 1024) — use 0.0 for crashes
 5. status: `keep`, `discard`, or `crash`
@@ -105,11 +105,11 @@ commit test_mean_rmse pEC50_rmse	memory_gb	status	description
 Example from a different project with a different metrics but for illustration:
 
 ```
-commit	val_bpb	memory_gb	status	description
-a1b2c3d	0.997900	44.0	keep	baseline
-b2c3d4e	0.993200	44.2	keep	increase LR to 0.04
-c3d4e5f	1.005000	44.0	discard	switch to GeLU activation
-d4e5f6g	0.000000	0.0	crash	double model width (OOM)
+commit	test_rmse test_mae  test_rae  test_r2 test_spearman test_kendall  memory_gb status	description
+a1b2c3d 0.997900  4.264005  5.308406  -17.530935  0.710344  0.517515  44.0	keep	baseline
+b2c3d4e	0.993200  4.264005  5.208406  -14.530935  0.710344  0.517515	44.2	keep	increase LR to 0.04
+c3d4e5f	1.005000  4.264005  5.508406  -16.530935  0.710344  0.517515	44.0	discard	switch to GeLU activation
+d4e5f6g	0.000000  4.264005  5.408406  -13.530935  0.710344  0.517515  0.0 crash	double model width (OOM)
 ```
 
 ## The experiment loop
