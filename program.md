@@ -31,45 +31,49 @@ Each experiment runs on a single GPU. The training script runs for a **fixed tim
 - Modify the evaluation harness. The `evaluate_regression` function in `prepare.py` is the ground truth metric.
 - Use ensembles to game the metrics, increases in performance by ensembeling should generally not give massive gains, this indicates improper aggregation of the metrics across an ensemble typically. 
 - You should not need to spawn a sub agent to run this, if you do ensure it has the full context of this file.
+- Look at any file in the offlimits folder
 
-**The goal is simple: get the lowest mean_rmse.** Since the time budget is fixed, you don't need to worry about training time — it's always 5 minutes. Everything is fair game: change the architecture, the optimizer, the hyperparameters, the batch size, the model size. The only constraint is that the code runs without crashing and finishes within the time budget.
+**The goal is simple: get the lowest pEC50 task rmse with a secondary objective of lower test_mean_rmse.** Since the time budget is fixed, you don't need to worry about training time — it's always 5 minutes. Everything is fair game: change the architecture, the optimizer, the hyperparameters, the batch size, the model size. The only constraint is that the code runs without crashing and finishes within the time budget.
 
-**VRAM** is a soft constraint. Some increase is acceptable for meaningful mean_rmse gains, but it should not blow up dramatically.
+**VRAM** is a soft constraint. Some increase is acceptable for meaningful rmse gains, but it should not blow up dramatically.
 
-**Simplicity criterion**: All else being equal, simpler is better. A small improvement that adds ugly complexity is not worth it. Conversely, removing something and getting equal or better results is a great outcome — that's a simplification win. When evaluating whether to keep a change, weigh the complexity cost against the improvement magnitude. A 0.001 mean_rmse improvement that adds 20 lines of hacky code? Probably not worth it. A 0.001 mean_rmse improvement from deleting code? Definitely keep. An improvement of ~0 but much simpler code? Keep.
+**Simplicity criterion**: All else being equal, simpler is better. A small improvement that adds ugly complexity is not worth it. Conversely, removing something and getting equal or better results is a great outcome — that's a simplification win. When evaluating whether to keep a change, weigh the complexity cost against the improvement magnitude. A 0.001 rmse improvement that adds 20 lines of hacky code? Probably not worth it. A 0.001 rmse improvement from deleting code? Definitely keep. An improvement of ~0 but much simpler code? Keep.
 
 **The first run**: Your very first run should always be to establish the baseline, so you will run the training script as is.
 
 ## Output format
 
-Once the script finishes it prints a summary like this:
+Once the script finishes it prints a summary like this, keep in mind that you can mix/match tasks so it might look slightly different from this run to run:
 
 ```
 --- Results ---
-val_mean_rmse:      3.549402
+val_mean_rmse:      3.559997
 val_per_task_rmse:
-  pEC50                                   : 4.397968
-  Emax_estimate (log2FC vs. baseline)     : 2.700835
+  pEC50                                   : 4.423581
+  Emax_estimate (log2FC vs. baseline)     : 2.696412
 
-test_mean_rmse:     3.495393
+test_mean_rmse:     3.509580
 test_per_task_rmse:
-  pEC50                                   : 4.391641
-  Emax_estimate (log2FC vs. baseline)     : 2.599144
+  pEC50                                   : 4.427027
+  Emax_estimate (log2FC vs. baseline)     : 2.592134
 
-training_seconds:   150.5
-total_seconds:      153.2
+training_seconds:   150.1
+total_seconds:      152.6
 startup_seconds:    0.7
 peak_vram_mb:       95.0
-num_epochs:         218
+num_epochs:         221
 train_molecules:    3,312
 val_molecules:      414
 test_molecules:     414
 n_tasks:            2
+target_cols:        ['pEC50', 'Emax_estimate (log2FC vs. baseline)']
+extra_features:     None
 depth:              3
 hidden_size:        300
 ffn_num_layers:     2
 batch_size:         64
 max_lr:             0.001
+
 ```
 
 Note that the script is configured to always stop after 5 minutes, so depending on the computing platform of this computer the numbers might look different. You can extract the key metric from the log filee in the folder lightning_logs/version_0 under metrics.csv . Logs from the python file will be in run.log
@@ -82,14 +86,15 @@ When an experiment is done, log it to `results.tsv` (tab-separated, NOT comma-se
 The TSV has a header row and 5 columns:
 
 ```
-commit	mean_rmse	memory_gb	status	description
+commit test_mean_rmse pEC50_rmse	memory_gb	status	description
 ```
 
 1. git commit hash (short, 7 chars)
 2. mean_rmse achieved (e.g. 1.234567) — use 0.000000 for crashes
-3. peak memory in GB, round to .1f (e.g. 12.3 — divide peak_vram_mb by 1024) — use 0.0 for crashes
-4. status: `keep`, `discard`, or `crash`
-5. short text description of what this experiment tried
+3. pEC50 rmse achieved - use 0.000000 for crashes
+4. peak memory in GB, round to .1f (e.g. 12.3 — divide peak_vram_mb by 1024) — use 0.0 for crashes
+5. status: `keep`, `discard`, or `crash`
+6. short text description of what this experiment tried
 
 Example from a different project with a different metrics but for illustration:
 
@@ -111,11 +116,11 @@ LOOP FOREVER:
 2. Tune `train.py` with an experimental idea by directly hacking the code.
 3. git commit
 4. Run the experiment: `uv run train.py > run.log 2>&1` (redirect everything — do NOT use tee or let output flood your context)
-5. Read out the results: `grep "^mean_rmse:\|^peak_vram_mb:" run.log`
+5. Read out the results as example but add pEC50: `grep "^mean_rmse:\|^peak_vram_mb:" run.log`
 6. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
 7. Record the results in the tsv (NOTE: do not commit the results.tsv file, leave it untracked by git)
-8. If mean_rmse improved (lower), you "advance" the branch, keeping the git commit
-9. If mean_rmse is equal or worse, you git reset back to where you started
+8. If pEC50 rmse improved (lower), you "advance" the branch, keeping the git commit
+9. If pEC50 rmse is equal or worse, go back to where you started, avoid removing git history though
 
 The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate. If you feel like you're getting stuck in some way, you can rewind but you should probably do this very very sparingly (if ever).
 
