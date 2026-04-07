@@ -13,6 +13,8 @@ import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 
+import shutil
+import tempfile
 import time
 import math
 from dataclasses import dataclass, asdict
@@ -20,9 +22,9 @@ from dataclasses import dataclass, asdict
 import numpy as np
 import torch
 import lightning.pytorch as pl
-from lightning.pytorch.callbacks import Callback
+from lightning.pytorch.callbacks import Callback, ModelCheckpoint
 
-from prepare import TIME_BUDGET, TARGET_COLS, make_dataloader, evaluate_regression
+from prepare import TIME_BUDGET, make_dataloader, evaluate_regression
 
 # ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly — no CLI flags needed)
@@ -48,6 +50,42 @@ FINAL_LR = 1e-4         # final learning rate after decay
 BATCH_NORM = True       # apply batch normalisation on aggregated fingerprint
 NUM_WORKERS = 15         # dataloader workers (>0 is faster on Linux)
 SEED = 42
+
+# columns to choose from
+"""
+['Molecule Name', 'SMILES', 'OCNT Batch', 'pEC50',
+       'pEC50_ci.lower (-log10(molarity))',
+       'pEC50_ci.upper (-log10(molarity))',
+       'Emax_estimate (log2FC vs. baseline)',
+       'Emax_ci.lower (log2FC vs. baseline)',
+       'Emax_ci.upper (log2FC vs. baseline)',
+       'Emax.vs.pos.ctrl_estimate (dimensionless)',
+       'Emax.vs.pos.ctrl_ci.lower (dimensionless)',
+       'Emax.vs.pos.ctrl_ci.upper (dimensionless)',
+       'pEC50_std.error (-log10(molarity))',
+       'Emax_std.error (log2FC vs. baseline)',
+       'Emax.vs.pos.ctrl_std.error (dimensionless)', 'Split',
+       'counter_OCNT Batch', 'counter_pEC50',
+       'counter_pEC50_ci.lower (-log10(molarity))',
+       'counter_pEC50_ci.upper (-log10(molarity))',
+       'counter_Emax_estimate (log2FC vs. baseline)',
+       'counter_Emax_ci.lower (log2FC vs. baseline)',
+       'counter_Emax_ci.upper (log2FC vs. baseline)',
+       'counter_Emax.vs.pos.ctrl_estimate (dimensionless)',
+       'counter_Emax.vs.pos.ctrl_ci.lower (dimensionless)',
+       'counter_Emax.vs.pos.ctrl_ci.upper (dimensionless)',
+       'counter_pEC50_std.error (-log10(molarity))',
+       'counter_Emax_std.error (log2FC vs. baseline)',
+       'counter_Emax.vs.pos.ctrl_std.error (dimensionless)']
+"""
+
+# be NaN for compounds not screened in the PXR-null cell line.
+TARGET_COLS = [
+    "pEC50",
+    "Emax_estimate (log2FC vs. baseline)",
+    "counter_pEC50",
+    "counter_Emax_estimate (log2FC vs. baseline)",
+]
 
 # ---------------------------------------------------------------------------
 # Model config (read-only after build — logged at startup)
@@ -212,14 +250,24 @@ devices = 1
 # Chemprop default is ~max_epochs=50 – we set a large ceiling and rely on time.
 MAX_EPOCHS = 500
 
+ckpt_dir = tempfile.mkdtemp(prefix="pxr_ckpt_")
+checkpoint_callback = ModelCheckpoint(
+    dirpath=ckpt_dir,
+    filename="best",
+    monitor="val_loss",
+    mode="min",
+    save_top_k=1,
+    verbose=False,
+)
+
 trainer = pl.Trainer(
     accelerator=accelerator,
     devices=devices,
     max_epochs=MAX_EPOCHS,
     logger=True,
-    enable_checkpointing=False,
+    enable_checkpointing=True,    # required when ModelCheckpoint is in callbacks
     enable_progress_bar=True,
-    callbacks=[time_callback],
+    callbacks=[time_callback, checkpoint_callback],
 )
 
 print(f"\nStarting training (accelerator={accelerator}, max wall-clock={TIME_BUDGET}s)…\n")
@@ -231,6 +279,18 @@ total_training_time = time_callback.total_training_seconds
 num_epochs = trainer.current_epoch + 1
 
 # ---------------------------------------------------------------------------
+# Load best checkpoint before evaluation
+# ---------------------------------------------------------------------------
+
+best_ckpt = checkpoint_callback.best_model_path
+if best_ckpt:
+    print(f"\nLoading best checkpoint (epoch {checkpoint_callback.best_model_score:.6f} val_loss): {best_ckpt}")
+    best_state = torch.load(best_ckpt, map_location="cuda" if torch.cuda.is_available() else "cpu", weights_only=False)
+    model.load_state_dict(best_state["state_dict"])
+else:
+    print("\nNo checkpoint saved — using final model weights.")
+
+# ---------------------------------------------------------------------------
 # Evaluation
 # ---------------------------------------------------------------------------
 
@@ -240,6 +300,8 @@ val_results  = evaluate_regression(model, val_loader,  batch_size=BATCH_SIZE)
 
 print("Running final evaluation on test set…")
 test_results = evaluate_regression(model, test_loader, batch_size=BATCH_SIZE)
+
+shutil.rmtree(ckpt_dir, ignore_errors=True)
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -253,17 +315,38 @@ peak_vram_mb = (
     else 0.0
 )
 
-print("\n--- Results ---")
-print(f"val_mean_rmse:      {val_results['mean_rmse']:.6f}")
-print("val_per_task_rmse:")
-for task, rmse in val_results["per_task"].items():
-    tag = f"{rmse:.6f}" if not math.isnan(rmse) else "  n/a (no labels)"
-    print(f"  {task:<40s}: {tag}")
-print(f"\ntest_mean_rmse:     {test_results['mean_rmse']:.6f}")
-print("test_per_task_rmse:")
-for task, rmse in test_results["per_task"].items():
-    tag = f"{rmse:.6f}" if not math.isnan(rmse) else "  n/a (no labels)"
-    print(f"  {task:<40s}: {tag}")
+METRIC_KEYS = ["rmse", "mae", "rae", "r2", "spearman", "kendall"]
+
+
+def _fmt(v):
+    return f"{v:.6f}" if not math.isnan(v) else "n/a"
+
+
+def _print_results(label: str, results: dict):
+    print(f"\n--- {label} ---")
+    print(f"  mean_rmse: {_fmt(results['mean_rmse'])}")
+    header = f"  {'task':<42s}" + "".join(f"  {m:>10s}" for m in METRIC_KEYS)
+    print(header)
+    print("  " + "-" * (42 + 12 * len(METRIC_KEYS)))
+    for task, metrics in results["per_task"].items():
+        row = f"  {task:<42s}" + "".join(f"  {_fmt(metrics[m]):>10s}" for m in METRIC_KEYS)
+        print(row)
+
+
+def _write_results(f, label: str, results: dict):
+    f.write(f"\n--- {label} ---\n")
+    f.write(f"  mean_rmse: {_fmt(results['mean_rmse'])}\n")
+    header = f"  {'task':<42s}" + "".join(f"  {m:>10s}" for m in METRIC_KEYS)
+    f.write(header + "\n")
+    f.write("  " + "-" * (42 + 12 * len(METRIC_KEYS)) + "\n")
+    for task, metrics in results["per_task"].items():
+        row = f"  {task:<42s}" + "".join(f"  {_fmt(metrics[m]):>10s}" for m in METRIC_KEYS)
+        f.write(row + "\n")
+
+
+_print_results("Validation", val_results)
+_print_results("Test", test_results)
+
 print(f"\ntraining_seconds:   {total_training_time:.1f}")
 print(f"total_seconds:      {t_end - t_start:.1f}")
 print(f"startup_seconds:    {startup_time:.1f}")
@@ -279,18 +362,9 @@ print(f"ffn_num_layers:     {FFN_NUM_LAYERS}")
 print(f"batch_size:         {BATCH_SIZE}")
 print(f"max_lr:             {MAX_LR}")
 
-#write to log file
-with open('run.log', 'w') as f:
-    f.write(f"val_mean_rmse:      {val_results['mean_rmse']:.6f}\n")
-    f.write("val_per_task_rmse:\n")
-    for task, rmse in val_results["per_task"].items():
-        tag = f"{rmse:.6f}" if not math.isnan(rmse) else "  n/a (no labels)"
-        f.write(f"  {task:<40s}: {tag}\n")
-    f.write(f"\ntest_mean_rmse:     {test_results['mean_rmse']:.6f}\n")
-    f.write("test_per_task_rmse:\n")
-    for task, rmse in test_results["per_task"].items():
-        tag = f"{rmse:.6f}" if not math.isnan(rmse) else "  n/a (no labels)"
-        f.write(f"  {task:<40s}: {tag}\n")
+with open("run.log", "w") as f:
+    _write_results(f, "Validation", val_results)
+    _write_results(f, "Test", test_results)
     f.write(f"\ntraining_seconds:   {total_training_time:.1f}\n")
     f.write(f"total_seconds:      {t_end - t_start:.1f}\n")
     f.write(f"startup_seconds:    {startup_time:.1f}\n")

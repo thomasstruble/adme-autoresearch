@@ -33,7 +33,7 @@ Each experiment runs on a single GPU. The training script runs for a **fixed tim
 - You should not need to spawn a sub agent to run this, if you do ensure it has the full context of this file.
 - Look at any file in the offlimits folder
 
-**The goal is simple: get the lowest pEC50 task rmse with a secondary objective of lower test_mean_rmse.** Since the time budget is fixed, you don't need to worry about training time — it's always 5 minutes. Everything is fair game: change the architecture, the optimizer, the hyperparameters, the batch size, the model size. The only constraint is that the code runs without crashing and finishes within the time budget.
+**The goal is simple: get the lowest pEC50 task rmse with a secondary objective of lower test_mean_rmse.** Since the time budget is fixed, you don't need to worry about training time — it's always 2.5 minutes. Everything is fair game: change the architecture, the optimizer, the hyperparameters, the batch size, the model size. The only constraint is that the code runs without crashing and finishes within the time budget. Use the other metrics such as mae, rae, r2, spearman, and kendall as secondary criteria, they need to be good but the main objective is the pEC50 rmse
 
 **VRAM** is a soft constraint. Some increase is acceptable for meaningful rmse gains, but it should not blow up dramatically.
 
@@ -46,33 +46,39 @@ Each experiment runs on a single GPU. The training script runs for a **fixed tim
 Once the script finishes it prints a summary like this, keep in mind that you can mix/match tasks so it might look slightly different from this run to run:
 
 ```
---- Results ---
-val_mean_rmse:      3.559997
-val_per_task_rmse:
-  pEC50                                   : 4.423581
-  Emax_estimate (log2FC vs. baseline)     : 2.696412
+--- Validation ---
+  mean_rmse: 3.008929
+  task                                              rmse         mae         rae          r2    spearman     kendall
+  ------------------------------------------------------------------------------------------------------------------
+  pEC50                                         4.317954    4.264005    5.308406  -17.530935    0.710344    0.517515
+  Emax_estimate (log2FC vs. baseline)           2.724411    2.591100    3.170728   -5.965121    0.437541    0.297036
+  counter_pEC50                                 3.113498    2.959512    3.541717   -8.644537    0.250351    0.172859
+  counter_Emax_estimate (log2FC vs. baseline)    1.879856    1.673849    2.634985   -3.183012    0.175326    0.124239
 
-test_mean_rmse:     3.509580
-test_per_task_rmse:
-  pEC50                                   : 4.427027
-  Emax_estimate (log2FC vs. baseline)     : 2.592134
+--- Test ---
+  mean_rmse: 2.990798
+  task                                              rmse         mae         rae          r2    spearman     kendall
+  ------------------------------------------------------------------------------------------------------------------
+  pEC50                                         4.260999    4.220594    5.441999  -18.695574    0.712952    0.523902
+  Emax_estimate (log2FC vs. baseline)           2.736183    2.605232    3.298728   -6.698135    0.341133    0.233499
+  counter_pEC50                                 3.166670    3.026706    3.764858   -9.504139    0.330141    0.230678
+  counter_Emax_estimate (log2FC vs. baseline)    1.799343    1.598711    2.816302   -3.511555    0.189803    0.131500
 
-training_seconds:   150.1
-total_seconds:      152.6
+training_seconds:   150.5
+total_seconds:      153.0
 startup_seconds:    0.7
-peak_vram_mb:       95.0
-num_epochs:         221
+peak_vram_mb:       96.3
+num_epochs:         234
 train_molecules:    3,312
 val_molecules:      414
 test_molecules:     414
-n_tasks:            2
-target_cols:        ['pEC50', 'Emax_estimate (log2FC vs. baseline)']
-extra_features:     None
+n_tasks:            4
 depth:              3
 hidden_size:        300
 ffn_num_layers:     2
 batch_size:         64
 max_lr:             0.001
+
 
 ```
 

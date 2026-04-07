@@ -14,11 +14,21 @@ from datasets import load_dataset, load_from_disk
 
 TIME_BUDGET = 150        # training time budget in seconds (5 minutes)
 
-# Regression target columns present in the dataset
+# Default regression targets used for training and evaluation.
+# All other assay columns (primary + counter) are present in the saved splits
+# and can be substituted here for different multi-task experiments.
+# Counter-assay columns are prefixed with "counter_" after the merge and will
+# be NaN for compounds not screened in the PXR-null cell line.
 TARGET_COLS = [
     "pEC50",
     "Emax_estimate (log2FC vs. baseline)",
+    "counter_pEC50",
+    "counter_Emax_estimate (log2FC vs. baseline)",
 ]
+
+# Columns in the counter-assay dataset to exclude from the merge
+# (either duplicated from the primary dataset or non-informative metadata).
+_COUNTER_COLS_SKIP = {"Molecule Name", "SMILES", "Split"}
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -38,14 +48,42 @@ SPLIT_SEED = 42
 # ---------------------------------------------------------------------------
 def download_data():
     """
-    Download the PXR challenge training data from Hugging Face, split into
-    train/validation/test (80/10/10), and save all three to disk.
+    Download the PXR challenge training data from Hugging Face, enrich it with
+    the PXR-null counter-assay data, split into train/validation/test
+    (80/10/10), and save all three to disk.
+
+    Counter-assay targets are merged on "Molecule Name" (the OpenADMET ID)
+    and stored with a ``counter_`` prefix.  Compounds present in only one of
+    the two datasets receive NaN for the missing targets; chemprop's loss
+    functions mask NaN labels automatically during training.
 
     The official HuggingFace test set is blinded (no labels), so both a
     held-out validation split and a local test split are carved from the
     training data instead.
     """
-    full_train = load_dataset(BASE_REPO, split="train", cache_dir=CACHE_DIR)
+    from datasets import Dataset as HFDataset
+
+    primary_df = load_dataset(BASE_REPO, split="train", cache_dir=CACHE_DIR).to_pandas()
+    counter_df = load_dataset(BASE_REPO, "counter_assay", split="train", cache_dir=CACHE_DIR).to_pandas()
+
+    # Rename all counter-assay columns (except the join key and skipped cols)
+    # with a "counter_" prefix so every column is available for multi-task experiments.
+    counter_rename = {
+        col: f"counter_{col}"
+        for col in counter_df.columns
+        if col not in _COUNTER_COLS_SKIP
+    }
+    counter_subset = counter_df.drop(columns=list(_COUNTER_COLS_SKIP - {"Molecule Name"})).rename(
+        columns=counter_rename
+    )
+
+    # Outer merge so we keep all primary compounds AND any counter-assay-only
+    # compounds (they'll have NaN for primary targets but still train the
+    # counter-assay prediction head).
+    merged_df = primary_df.merge(counter_subset, on="Molecule Name", how="outer")
+
+    # Restore the HuggingFace dataset format for the split API
+    full_train = HFDataset.from_pandas(merged_df, preserve_index=False)
 
     # First carve off 20 % (val + test), leaving 80 % for training
     split1 = full_train.train_test_split(
@@ -53,8 +91,8 @@ def download_data():
         seed=SPLIT_SEED,
         shuffle=True,
     )
-    train_ds   = split1["train"]
-    remainder  = split1["test"]
+    train_ds  = split1["train"]
+    remainder = split1["test"]
 
     # Split the 20 % remainder evenly into val (10 %) and test (10 %)
     split2 = remainder.train_test_split(
@@ -69,6 +107,9 @@ def download_data():
     val_ds.save_to_disk(os.path.join(DATA_DIR, "validation"))
     test_ds.save_to_disk(os.path.join(DATA_DIR, "test"))
 
+    n_counter = merged_df["counter_pEC50"].notna().sum()
+    print(f"Merged {len(primary_df):,} primary + {len(counter_df):,} counter-assay rows "
+          f"→ {len(merged_df):,} total ({n_counter:,} with counter-assay labels)")
     print(f"Saved train split      ({len(train_ds):,} rows) → {os.path.join(DATA_DIR, 'train')}")
     print(f"Saved validation split ({len(val_ds):,} rows)  → {os.path.join(DATA_DIR, 'validation')}")
     print(f"Saved test split       ({len(test_ds):,} rows)  → {os.path.join(DATA_DIR, 'test')}")
@@ -173,19 +214,26 @@ def make_dataloader(split: str = "train", batch_size: int = 64, num_workers: int
 @torch.no_grad()
 def evaluate_regression(model, val_loader, batch_size: int = 64):
     """
-    Evaluate a chemprop MPNN on a validation DataLoader using per-task RMSE.
+    Evaluate a chemprop MPNN on a validation DataLoader.
 
-    Missing ground-truth labels (NaN) are masked out per task before computing
-    RMSE, so tasks with sparse labels are still evaluated fairly.  The returned
-    ``"mean_rmse"`` is the mean RMSE across all tasks that have *at least one*
-    non-missing label in the split — this is the primary scalar metric used to
-    compare runs.
+    Per-task metrics computed (NaN labels masked out per task):
+
+    * RMSE      — root mean squared error
+    * MAE       — mean absolute error
+    * RAE       — relative absolute error  = Σ|pred-gt| / Σ|mean(gt)-gt|
+    * R²        — coefficient of determination
+    * Spearman  — Spearman rank correlation (ρ)
+    * Kendall   — Kendall rank correlation (τ)
+
+    The returned ``"mean_rmse"`` is the mean RMSE across all tasks that have
+    at least one non-missing label — kept as the primary scalar for backwards
+    compatibility.
 
     .. note::
         If target scaling (``StandardScaler``) was applied during training, the
         ``model`` should include the inverse transform in its
         ``output_transform`` so that predictions are returned in the original
-        units.  Otherwise RMSE values will be on the scaled scale.
+        units.  Otherwise metric values will be on the scaled scale.
 
     Parameters
     ----------
@@ -200,11 +248,12 @@ def evaluate_regression(model, val_loader, batch_size: int = 64):
     Returns
     -------
     dict with keys:
-        ``"rmse_per_task"``  ``list[float]`` RMSE for each target in
-                            ``TARGET_COLS``; ``float('nan')`` if no labels.
-        ``"mean_rmse"``     ``float`` mean RMSE across tasks with valid labels.
-        ``"per_task"``      ``dict[str, float]`` mapping target name → RMSE.
+        ``"mean_rmse"``   ``float``  mean RMSE across tasks with valid labels.
+        ``"per_task"``    ``dict[str, dict[str, float]]``  per-task metric dicts.
+                          Each inner dict has keys: rmse, mae, rae, r2,
+                          spearman, kendall.
     """
+    from scipy.stats import spearmanr, kendalltau
     import lightning.pytorch as pl
 
     device = next(model.parameters()).device
@@ -230,28 +279,46 @@ def evaluate_regression(model, val_loader, batch_size: int = 64):
         all_targets.append(Y.numpy() if isinstance(Y, torch.Tensor) else np.array(Y))
     targets = np.concatenate(all_targets, axis=0)       # [N, T]
 
-    # Per-task RMSE, ignoring NaN ground-truth entries
+    # Per-task metrics, ignoring NaN ground-truth entries
     n_tasks = targets.shape[1]
-    rmse_per_task: list[float] = []
-    for t in range(n_tasks):
+    per_task: dict[str, dict[str, float]] = {}
+
+    nan = float("nan")
+    for t, col in enumerate(TARGET_COLS):
         gt = targets[:, t]
         pr = preds[:, t] if preds.ndim > 1 else preds
         mask = ~np.isnan(gt)
-        if mask.sum() == 0:
-            rmse_per_task.append(float("nan"))
-        else:
-            rmse = float(np.sqrt(np.mean((gt[mask] - pr[mask]) ** 2)))
-            rmse_per_task.append(rmse)
+        n = mask.sum()
 
-    valid_rmses = [r for r in rmse_per_task if not np.isnan(r)]
-    mean_rmse = float(np.mean(valid_rmses)) if valid_rmses else float("nan")
+        if n == 0:
+            per_task[col] = dict(rmse=nan, mae=nan, rae=nan, r2=nan, spearman=nan, kendall=nan)
+            continue
 
-    per_task = {col: rmse_per_task[i] for i, col in enumerate(TARGET_COLS)}
+        gt_m, pr_m = gt[mask], pr[mask]
+        residuals  = gt_m - pr_m
+        abs_err    = np.abs(residuals)
+
+        rmse = float(np.sqrt(np.mean(residuals ** 2)))
+        mae  = float(np.mean(abs_err))
+
+        denom_rae = np.sum(np.abs(gt_m - gt_m.mean()))
+        rae  = float(np.sum(abs_err) / denom_rae) if denom_rae > 0 else nan
+
+        ss_res = np.sum(residuals ** 2)
+        ss_tot = np.sum((gt_m - gt_m.mean()) ** 2)
+        r2   = float(1 - ss_res / ss_tot) if ss_tot > 0 else nan
+
+        spearman = float(spearmanr(gt_m, pr_m).statistic) if n >= 3 else nan
+        kendall  = float(kendalltau(gt_m, pr_m).statistic) if n >= 3 else nan
+
+        per_task[col] = dict(rmse=rmse, mae=mae, rae=rae, r2=r2, spearman=spearman, kendall=kendall)
+
+    valid_rmses = [m["rmse"] for m in per_task.values() if not np.isnan(m["rmse"])]
+    mean_rmse   = float(np.mean(valid_rmses)) if valid_rmses else nan
 
     return {
-        "rmse_per_task": rmse_per_task,
         "mean_rmse": mean_rmse,
-        "per_task": per_task,
+        "per_task":  per_task,
     }
 
 
